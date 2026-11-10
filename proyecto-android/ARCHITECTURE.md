@@ -106,3 +106,10 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 ## Compilación (Fusión / GitHub Actions)
 - Gradle en Groovy (`build.gradle`, `settings.gradle`), AGP 8.5.0, Kotlin 1.9.24, `compileSdk`/`targetSdk` 34: igual que La Bóveda y lo que instala el workflow.
 - La firma la aporta el keystore compartido `apk-build/debug.keystore` de Fusión (el bloque `signingConfigs` ya apunta a él). Es lo que hace coincidir la firma de ambas apps y concede el permiso del puente 🔑.
+
+## Portapapeles, emojis y pulsación larga (v0.3)
+
+- **Portapapeles seguro** (`clipboard/`): historial cifrado con AES-256-GCM (clave en Android Keystore) en un archivo privado. `ClipboardWatcher` escucha `OnPrimaryClipChangedListener` y hace una lectura al abrir el teclado. Ignora clips marcados `IS_SENSITIVE`, y se pausa en campos de contraseña. Nunca se usa para credenciales de La Bóveda.
+- **Emojis** (`ui/EmojiData`, `ui/EmojiPanel`): rejilla por categorías, filtrada con `Paint.hasGlyph`; recientes en `Prefs` (no se guardan en campos de contraseña).
+- **Pulsación larga** (`ui/KeyboardView`): 350 ms abre una tira de alternativas. Fila superior q–p: números 1–0; vocales y c: tildes/diéresis/cedilla; punto: `? ¿ ! ¡ : ; … - '`. Deslizar elige; soltar escribe.
+- **Diagnóstico 🔑**: toasts diferenciados (`vault_*`) y watchdog de 3 s si Bóveda no llega a abrirse.
