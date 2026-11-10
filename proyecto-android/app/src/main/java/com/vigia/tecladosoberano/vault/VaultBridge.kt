@@ -120,11 +120,15 @@ class VaultBridge(private val context: Context) {
         val publica = par.public.encoded
         val p = Peticion(id, par, publica, destino, info.fieldId, info.fieldName, campo.isPassword)
 
-        val receptor = object : ResultReceiver(principal) {
+        val local = object : ResultReceiver(principal) {
             override fun onReceiveResult(codigo: Int, datos: Bundle?) {
                 alRecibir(p, codigo, datos)
             }
         }
+        // Una subclase anónima NO puede viajar en el Intent: La Bóveda intentaría cargar
+        // su clase (VaultBridge$iniciar$receptor$1), no la encontraría y perdería el receptor.
+        // Se envía una copia genérica de ResultReceiver que apunta al mismo Binder.
+        val receptor = genericoParaEnviar(local)
 
         val intent = Intent()
             .setComponent(componente)
@@ -305,5 +309,16 @@ class VaultBridge(private val context: Context) {
 
         /** Un cierre antes de este tiempo no lo hizo la persona: se avisa con su motivo. */
         private const val CIERRE_RAPIDO_MS = 2_500L
+    }
+
+    private fun genericoParaEnviar(r: ResultReceiver): ResultReceiver {
+        val parcel = android.os.Parcel.obtain()
+        try {
+            r.writeToParcel(parcel, 0)
+            parcel.setDataPosition(0)
+            return ResultReceiver.CREATOR.createFromParcel(parcel)
+        } finally {
+            parcel.recycle()
+        }
     }
 }
