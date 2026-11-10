@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TecladoSoberano" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ks_background</item>
+        <item name="android:statusBarColor">@color/ks_background</item>
+        <item name="android:navigationBarColor">@color/ks_background</item>
+        <item name="android:colorAccent">@color/ks_accent</item>
+    </style>
+</resources>
