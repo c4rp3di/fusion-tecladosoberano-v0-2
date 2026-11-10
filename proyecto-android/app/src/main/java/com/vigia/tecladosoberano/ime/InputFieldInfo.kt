@@ -10,7 +10,9 @@ import android.view.inputmethod.EditorInfo
 data class InputFieldInfo(
     val isPassword: Boolean,
     val isNumeric: Boolean,
-    val suggestionsAllowed: Boolean
+    val suggestionsAllowed: Boolean,
+    /** Falso en campos de correo/URL: no se aprenden palabras de ahí. */
+    val learnAllowed: Boolean = true
 ) {
     companion object {
         fun from(info: EditorInfo?): InputFieldInfo {
@@ -37,7 +39,12 @@ data class InputFieldInfo(
             return InputFieldInfo(
                 isPassword = isPassword,
                 isNumeric = isNumeric,
-                suggestionsAllowed = !isPassword && !noSuggestions && !isNumeric
+                suggestionsAllowed = !isPassword && !noSuggestions && !isNumeric,
+                learnAllowed = !isPassword && !noSuggestions && !isNumeric && !(cls == InputType.TYPE_CLASS_TEXT && (
+                    variation == InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS ||
+                        variation == InputType.TYPE_TEXT_VARIATION_URI ||
+                        variation == InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS
+                    ))
             )
         }
     }
