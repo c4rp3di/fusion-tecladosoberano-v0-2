@@ -19,6 +19,14 @@ class KeyActionHandler(
 
     var editorInfo: EditorInfo? = null
 
+    /** La tecla 😀 pide abrir el panel de emojis (lo gestiona el servicio). */
+    var onOpenEmoji: (() -> Unit)? = null
+
+    /** Borrar hacia atrás (también lo usa el panel de emojis). */
+    fun backspace() {
+        delete(inputConnection())
+    }
+
     fun onKey(key: Key) {
         val ic = inputConnection()
         when (key.type) {
@@ -31,6 +39,7 @@ class KeyActionHandler(
             KeyType.TO_SYMBOLS -> setMode(KeyboardMode.SYMBOLS)
             KeyType.TO_SYMBOLS2 -> setMode(KeyboardMode.SYMBOLS2)
             KeyType.TO_NUMERIC -> setMode(KeyboardMode.NUMERIC)
+            KeyType.EMOJI -> onOpenEmoji?.invoke()
         }
     }
 
