@@ -66,6 +66,17 @@ class SettingsActivity : Activity() {
         content.addView(label(getString(R.string.settings_background), 16f, bold = true).withTopMargin(24))
         content.addView(swatchRow(backgroundChoices) { prefs.background = it }.withTopMargin(10))
 
+        content.addView(label(getString(R.string.settings_learn), 14f, dim = true).withTopMargin(28))
+        content.addView(android.widget.Switch(this).apply {
+            isChecked = prefs.learnWords
+            setTextColor(Color.WHITE)
+            setOnCheckedChangeListener { _, on -> prefs.learnWords = on }
+        }.withTopMargin(6))
+        content.addView(button(getString(R.string.settings_forget)) {
+            com.vigia.tecladosoberano.suggest.WordStore(this).clear()
+            android.widget.Toast.makeText(this, R.string.settings_forgotten, android.widget.Toast.LENGTH_SHORT).show()
+        }.withTopMargin(8))
+
         val test = EditText(this).apply {
             hint = getString(R.string.settings_test_hint)
             setTextColor(Color.WHITE)
