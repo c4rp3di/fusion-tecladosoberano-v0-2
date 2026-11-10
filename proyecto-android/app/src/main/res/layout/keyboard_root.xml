@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/keyboard_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/ks_background"
+    android:orientation="vertical">
+
+    <!-- Barra superior: Bóveda | sugerencias | portapapeles -->
+    <LinearLayout
+        android:id="@+id/suggestion_bar"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/btn_vault"
+            android:layout_width="52dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/desc_vault"
+            android:gravity="center"
+            android:text="🔑"
+            android:textSize="20sp" />
+
+        <LinearLayout
+            android:id="@+id/suggestions_container"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/suggestion_1"
+                style="@style/SuggestionText" />
+
+            <TextView
+                android:id="@+id/suggestion_2"
+                style="@style/SuggestionText" />
+
+            <TextView
+                android:id="@+id/suggestion_3"
+                style="@style/SuggestionText" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_clipboard"
+            android:layout_width="52dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/desc_clipboard"
+            android:gravity="center"
+            android:text="📋"
+            android:textSize="20sp" />
+    </LinearLayout>
+
+    <com.vigia.tecladosoberano.ui.KeyboardView
+        android:id="@+id/keyboard_view"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+</LinearLayout>
