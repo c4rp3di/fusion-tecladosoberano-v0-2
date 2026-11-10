@@ -1,5 +1,6 @@
 package com.vigia.tecladosoberano.vault
 
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -8,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.ResultReceiver
+import android.os.SystemClock
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import com.vigia.tecladosoberano.ime.InputFieldInfo
@@ -21,17 +23,18 @@ import java.util.Arrays
  * Lado teclado del puente con La Bóveda (botón 🔑).
  *
  * Flujo:
- *  1. [iniciar]: comprueba que La Bóveda está instalada y firmada con la MISMA llave, genera un par
+ *  1. [iniciar]: comprueba que La Bóveda está instalada, con el puente y firmada con la MISMA llave, genera un par
  *     efímero y lanza PuenteTecladoActivity con un Intent explícito (protegido por permiso de firma).
- *  2. La Bóveda autentica a la persona, esta elige la credencial y La Bóveda contesta, cifrada, por el ResultReceiver.
+ *  2. La Bóveda avisa de que se abrió (COD_ABIERTA), autentica a la persona, esta elige la credencial y La Bóveda
+ *     contesta, cifrada, por el ResultReceiver.
  *  3. Al llegar la respuesta la credencial queda en memoria ([hayPendiente]) unos segundos. Se escribe con
- *     commitText cuando el campo de la app de destino vuelve a tener el foco (aquí o al pulsar 🔑 de nuevo).
+ *     commitText cuando el campo de la app de destino vuelve a tener el foco (o al pulsar 🔑 de nuevo).
  *
  * Nada pasa por el portapapeles, el disco ni los logs. Los datos solo viven en CharArray y se ponen a cero.
  */
 class VaultBridge(private val context: Context) {
 
-    enum class Inicio { OK, NO_INSTALADA, FIRMA_DISTINTA, EN_CURSO, ERROR }
+    enum class Inicio { OK, NO_INSTALADA, FIRMA_DISTINTA, SIN_PERMISO, BOVEDA_SIN_PUENTE, EN_CURSO, ERROR }
 
     private class Peticion(
         val id: ByteArray,
@@ -58,20 +61,29 @@ class VaultBridge(private val context: Context) {
     private var peticion: Peticion? = null
     private var pendiente: Pendiente? = null
 
+    /** La Bóveda confirmó que mostró su pantalla. */
+    private var abierta = false
+    private var inicioMs = 0L
+
     private val caducarPeticion = Runnable {
         peticion = null
         alCambiar?.invoke()
     }
     private val caducarPendiente = Runnable { olvidar() }
 
+    /** Si pasan unos segundos sin que La Bóveda confirme que se abrió, Android ha bloqueado el lanzamiento. */
+    private val vigilarApertura = Runnable {
+        if (peticion != null && !abierta) alFallo?.invoke(FALLO_NO_ABRIO, null)
+    }
+
     /** Cambió el estado (hay o no credencial pendiente): sirve para repintar el botón 🔑. */
     var alCambiar: (() -> Unit)? = null
 
-    /** Llegó una credencial: el servicio intenta escribirla si el campo de destino ya tiene el foco. */
-    var alRecibirCredencial: (() -> Unit)? = null
-
-    /** La Bóveda contestó con un fallo (código COD_*). La cancelación voluntaria no se notifica. */
-    var alFallo: ((Int) -> Unit)? = null
+    /**
+     * Algo falló: (código COD_* de La Bóveda o [FALLO_NO_ABRIO], motivo corto para diagnóstico).
+     * Una cancelación voluntaria no se notifica.
+     */
+    var alFallo: ((Int, String?) -> Unit)? = null
 
     val hayPendiente: Boolean get() = pendiente != null
 
@@ -92,6 +104,13 @@ class VaultBridge(private val context: Context) {
         if (pm.checkSignatures(context.packageName, PuenteContrato.PAQUETE_BOVEDA) != PackageManager.SIGNATURE_MATCH) {
             return Inicio.FIRMA_DISTINTA
         }
+        if (context.checkSelfPermission(PuenteContrato.PERMISO) != PackageManager.PERMISSION_GRANTED) {
+            return Inicio.SIN_PERMISO
+        }
+        val componente = ComponentName(PuenteContrato.PAQUETE_BOVEDA, PuenteContrato.ACTIVIDAD_BOVEDA)
+        if (Intent().setComponent(componente).resolveActivityInfo(pm, 0) == null) {
+            return Inicio.BOVEDA_SIN_PUENTE
+        }
 
         olvidarPendiente()
 
@@ -108,7 +127,7 @@ class VaultBridge(private val context: Context) {
         }
 
         val intent = Intent()
-            .setComponent(ComponentName(PuenteContrato.PAQUETE_BOVEDA, PuenteContrato.ACTIVIDAD_BOVEDA))
+            .setComponent(componente)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             .putExtra(PuenteContrato.EXTRA_VERSION, PuenteContrato.VERSION)
             .putExtra(PuenteContrato.EXTRA_ID, id)
@@ -117,32 +136,53 @@ class VaultBridge(private val context: Context) {
             .putExtra(PuenteContrato.EXTRA_RECEPTOR, receptor)
 
         peticion = p
+        abierta = false
         try {
             context.startActivity(intent)
+        } catch (e: SecurityException) {
+            peticion = null
+            return Inicio.SIN_PERMISO
+        } catch (e: ActivityNotFoundException) {
+            peticion = null
+            return Inicio.BOVEDA_SIN_PUENTE
         } catch (e: Exception) {
-            // SecurityException (sin el permiso de firma) o ActivityNotFoundException (La Bóveda sin el puente).
             peticion = null
             return Inicio.ERROR
         }
+        inicioMs = SystemClock.elapsedRealtime()
         principal.postDelayed(caducarPeticion, VIDA_PETICION_MS)
+        principal.postDelayed(vigilarApertura, ESPERA_APERTURA_MS)
         alCambiar?.invoke()
         return Inicio.OK
     }
 
     private fun cancelarPeticion() {
         principal.removeCallbacks(caducarPeticion)
+        principal.removeCallbacks(vigilarApertura)
         peticion = null
     }
 
     // ------------------------------------------------------------------ respuesta
 
     private fun alRecibir(p: Peticion, codigo: Int, datos: Bundle?) {
-        // Solo vale la respuesta de la petición vigente: una sola vez y dentro de plazo.
+        // Solo vale la respuesta de la petición vigente.
         if (peticion !== p) return
+
+        // Aviso de vida: La Bóveda mostró su pantalla. La petición sigue abierta.
+        if (codigo == PuenteContrato.COD_ABIERTA) {
+            abierta = true
+            principal.removeCallbacks(vigilarApertura)
+            return
+        }
         cancelarPeticion()
 
         if (codigo != PuenteContrato.COD_OK || datos == null) {
-            if (codigo != PuenteContrato.COD_CANCELADO) alFallo?.invoke(codigo)
+            val motivo = datos?.getString(PuenteContrato.RES_MOTIVO)
+            val rapido = SystemClock.elapsedRealtime() - inicioMs < CIERRE_RAPIDO_MS
+            // Una cancelación de la persona no se avisa; un cierre instantáneo con motivo, sí (algo falló).
+            if (codigo != PuenteContrato.COD_CANCELADO || (motivo != null && rapido)) {
+                alFallo?.invoke(codigo, motivo)
+            }
             alCambiar?.invoke()
             return
         }
@@ -150,7 +190,7 @@ class VaultBridge(private val context: Context) {
         val iv = datos.getByteArray(PuenteContrato.RES_IV)
         val cifrado = datos.getByteArray(PuenteContrato.RES_CIFRADO)
         if (publica == null || iv == null || cifrado == null) {
-            alFallo?.invoke(PuenteContrato.COD_ERROR)
+            alFallo?.invoke(PuenteContrato.COD_ERROR, "respuesta_incompleta")
             return
         }
 
@@ -166,12 +206,12 @@ class VaultBridge(private val context: Context) {
             pendiente = Pendiente(usuario, clave, p.destino, p.campoId, p.campoNombre, p.campoEraClave)
             principal.postDelayed(caducarPendiente, VIDA_PENDIENTE_MS)
         } catch (e: Exception) {
-            alFallo?.invoke(PuenteContrato.COD_ERROR)
+            alFallo?.invoke(PuenteContrato.COD_ERROR, "descifrado_" + e.javaClass.simpleName)
             return
         } finally {
             claro?.fill(0)
         }
-        alRecibirCredencial?.invoke()
+        // La credencial se escribe cuando el campo de la app de destino recupera el foco (alIniciarCampo).
         alCambiar?.invoke()
     }
 
@@ -250,11 +290,20 @@ class VaultBridge(private val context: Context) {
         alCambiar?.invoke()
     }
 
-    private companion object {
+    companion object {
+        /** Código propio (no viene de La Bóveda): no confirmó que se abriera a tiempo. */
+        const val FALLO_NO_ABRIO = -1
+
         /** Plazo para autenticarse y elegir en La Bóveda. */
-        const val VIDA_PETICION_MS = 90_000L
+        private const val VIDA_PETICION_MS = 90_000L
 
         /** Cuánto espera la credencial en memoria a que la persona vuelva al campo. */
-        const val VIDA_PENDIENTE_MS = 90_000L
+        private const val VIDA_PENDIENTE_MS = 90_000L
+
+        /** Tiempo máximo para que La Bóveda confirme que se abrió (arranque en frío incluido). */
+        private const val ESPERA_APERTURA_MS = 3_000L
+
+        /** Un cierre antes de este tiempo no lo hizo la persona: se avisa con su motivo. */
+        private const val CIERRE_RAPIDO_MS = 2_500L
     }
 }
