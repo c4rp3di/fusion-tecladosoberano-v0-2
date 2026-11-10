@@ -19,6 +19,11 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_BACKGROUND, DEFAULT_BACKGROUND)
         set(value) = sp.edit().putInt(KEY_BACKGROUND, value).apply()
 
+    /** Aprender palabras nuevas (fuera del diccionario). Nunca en campos de contraseña. */
+    var learnWords: Boolean
+        get() = sp.getBoolean(KEY_LEARN, true)
+        set(value) = sp.edit().putBoolean(KEY_LEARN, value).apply()
+
     /** Del más reciente al más antiguo. */
     val recentEmojis: List<String>
         get() = (sp.getString(KEY_RECENT, "") ?: "").split(' ').filter { it.isNotEmpty() }
@@ -34,6 +39,7 @@ class Prefs(context: Context) {
     companion object {
         private const val KEY_ACCENT = "accent"
         private const val KEY_BACKGROUND = "background"
+        private const val KEY_LEARN = "learn_words"
         private const val KEY_RECENT = "recent_emojis"
         private const val MAX_RECENT = 32
 
