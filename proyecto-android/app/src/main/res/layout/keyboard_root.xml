@@ -58,4 +58,11 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content" />
 
+    <!-- Paneles (emojis / portapapeles): ocupan el sitio del teclado cuando están abiertos. -->
+    <FrameLayout
+        android:id="@+id/panel_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+
 </LinearLayout>
