@@ -7,7 +7,6 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
-import android.widget.Toast
 import androidx.core.graphics.ColorUtils
 import com.vigia.tecladosoberano.R
 import com.vigia.tecladosoberano.clipboard.ClipboardStore
@@ -265,7 +264,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         }
         // El motivo (código corto, nunca datos) ayuda a diagnosticar si algo falla.
         val texto = if (motivo != null) "$base [$motivo]" else base
-        Toast.makeText(this, texto, Toast.LENGTH_LONG).show()
+        aviso(texto)
     }
 
     /** El botón 🔑 se tiñe con el color de acento mientras hay una credencial lista para escribir. */
@@ -278,8 +277,36 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         }
     }
 
-    private fun toast(resId: Int) {
-        Toast.makeText(this, resId, Toast.LENGTH_LONG).show()
+    private fun toast(resId: Int) = aviso(getString(resId))
+
+    private val quitarAviso = Runnable {
+        avisoView?.visibility = View.GONE
+        suggestionsContainer?.visibility = View.VISIBLE
+    }
+    private var avisoView: android.widget.TextView? = null
+
+    /**
+     * Aviso dentro del propio teclado (sobre la barra de sugerencias). Los toasts no sirven:
+     * algunos sistemas (MIUI) los suprimen para los teclados.
+     */
+    private fun aviso(texto: String) {
+        val barra = suggestionsContainer ?: return
+        val padre = barra.parent as? android.view.ViewGroup ?: return
+        val v = avisoView ?: android.widget.TextView(this).also { t ->
+            t.setTextColor(Color.WHITE)
+            t.textSize = 13f
+            t.maxLines = 2
+            t.gravity = android.view.Gravity.CENTER_VERTICAL
+            t.layoutParams = barra.layoutParams
+            val idx = padre.indexOfChild(barra)
+            padre.addView(t, idx + 1)
+            avisoView = t
+        }
+        v.text = texto
+        v.visibility = View.VISIBLE
+        barra.visibility = View.GONE
+        v.removeCallbacks(quitarAviso)
+        v.postDelayed(quitarAviso, 5000)
     }
 
     // ------------------------------------------------------------------ interfaz
