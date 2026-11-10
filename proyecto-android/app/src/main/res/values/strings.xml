@@ -30,4 +30,9 @@
     <string name="settings_accent">Color de acento</string>
     <string name="settings_background">Fondo del teclado</string>
     <string name="settings_test_hint">Escribe aquí para probar</string>
+    <string name="emoji_buscar">🔍  Buscar emoji…</string>
+    <string name="desc_numeric">Teclado numérico</string>
+    <string name="settings_learn">Aprender palabras nuevas (solo las que no están en el diccionario; nunca en campos de contraseña)</string>
+    <string name="settings_forget">Borrar palabras aprendidas</string>
+    <string name="settings_forgotten">Palabras aprendidas borradas</string>
 </resources>
