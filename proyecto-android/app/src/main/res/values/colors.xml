@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ks_background">#0E1116</color>
+    <color name="ks_accent">#22D3A6</color>
+    <color name="ks_text">#E6E8EB</color>
+    <color name="ks_text_dim">#8B93A0</color>
+</resources>
