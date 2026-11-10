@@ -20,6 +20,8 @@ import com.vigia.tecladosoberano.ime.ShiftState
  * - La tecla se dispara al levantar el dedo, sobre la tecla que haya debajo (corrige deslices).
  * - La zona táctil de cada tecla ocupa toda su celda: no hay huecos muertos entre teclas.
  * - Feedback visual: la tecla pulsada se rellena con el color de acento. Sin vibración.
+ * - Pulsación larga en una tecla con alternativas ([Key.alts]): se abre una ventanita sobre la tecla;
+ *   se desliza el dedo en horizontal para elegir y se suelta para escribir.
  */
 class KeyboardView @JvmOverloads constructor(
     context: Context,
@@ -58,10 +60,14 @@ class KeyboardView @JvmOverloads constructor(
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+    private val hintPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.RIGHT }
     private val bodyRect = RectF()
     private val shadowRect = RectF()
+    private val haloRect = RectF()
 
     private val uiHandler = Handler(Looper.getMainLooper())
+
+    // --- repetición al mantener pulsado (borrar)
     private var repeatKey: Key? = null
     private var repeatFired = false
     private val repeatRunnable = object : Runnable {
@@ -73,11 +79,25 @@ class KeyboardView @JvmOverloads constructor(
         }
     }
 
+    // --- pulsación larga con ventanita de alternativas
+    private var pendingKey: Key? = null
+    private var pendingPointer = -1
+    private var pendingX = 0f
+    private val longPressRunnable = Runnable { openPopup() }
+
+    private var popupPointer = -1
+    private var popupKey: Key? = null
+    private var popupItems: List<String> = emptyList()
+    private var popupRects: List<RectF> = emptyList()
+    private var popupSelected = -1
+
     fun setRows(newRows: List<List<Key>>) {
         if (rows === newRows) return
         rows = newRows
         pressedKeys.clear()
         stopRepeat()
+        cancelPending()
+        closePopup()
         requestLayout()
         computeRects()
         invalidate()
@@ -121,6 +141,8 @@ class KeyboardView @JvmOverloads constructor(
         return null
     }
 
+    // ------------------------------------------------------------------ dibujo
+
     override fun onDraw(canvas: Canvas) {
         val theme = keyboardTheme
         val pressed = pressedKeys.values
@@ -160,12 +182,57 @@ class KeyboardView @JvmOverloads constructor(
             val label = key.labelFor(shiftState)
             if (label.isNotEmpty()) {
                 textPaint.color = textColor
-                textPaint.textSize = (if (label.length > 1) 15f else 22f) * scaledDensity
+                // Por puntos de código: un emoji (2 chars) cuenta como un símbolo y se dibuja grande.
+                val simbolos = label.codePointCount(0, label.length)
+                textPaint.textSize = (if (simbolos > 1) 15f else 22f) * scaledDensity
                 val baseline = bodyRect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
                 canvas.drawText(label, bodyRect.centerX(), baseline, textPaint)
             }
+
+            // Pista de la pulsación larga (el número de la fila superior, la ? del punto).
+            val hint = key.hint
+            if (hint != null) {
+                hintPaint.color = (textColor and 0x00FFFFFF) or (0x99 shl 24)
+                hintPaint.textSize = 10.5f * scaledDensity
+                canvas.drawText(hint, bodyRect.right - 5f * density, bodyRect.top + 13f * density, hintPaint)
+            }
+        }
+
+        if (popupKey != null && popupRects.isNotEmpty()) drawPopup(canvas, theme)
+    }
+
+    private fun drawPopup(canvas: Canvas, theme: KeyboardTheme) {
+        val first = popupRects.first()
+        val last = popupRects.last()
+        bodyRect.set(first.left, first.top, last.right, first.bottom)
+        bodyRect.inset(gap, gap)
+
+        // Halo oscuro para despegar la ventanita de las teclas de debajo.
+        haloRect.set(bodyRect)
+        haloRect.inset(-3f * density, -3f * density)
+        fillPaint.color = theme.shadow
+        canvas.drawRoundRect(haloRect, corner + 3f * density, corner + 3f * density, fillPaint)
+        fillPaint.color = theme.keyFunction
+        canvas.drawRoundRect(bodyRect, corner, corner, fillPaint)
+
+        popupRects.forEachIndexed { i, cell ->
+            val selected = i == popupSelected
+            bodyRect.set(cell)
+            bodyRect.inset(gap * 1.5f, gap * 1.5f)
+            if (selected) {
+                fillPaint.color = theme.accent
+                canvas.drawRoundRect(bodyRect, corner, corner, fillPaint)
+            }
+            val item = popupItems[i]
+            val etiqueta = if (shiftState != ShiftState.OFF) item.uppercase() else item
+            textPaint.color = if (selected) theme.onAccent else theme.text
+            textPaint.textSize = 22f * scaledDensity
+            val baseline = bodyRect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText(etiqueta, bodyRect.centerX(), baseline, textPaint)
         }
     }
+
+    // ------------------------------------------------------------------ táctil
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -173,9 +240,16 @@ class KeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = event.actionIndex
                 val key = keyAt(event.getX(i), event.getY(i))
+                // Un dedo nuevo anula una pulsación larga pendiente de otro dedo: la primera tecla se escribe normal.
+                cancelPending()
                 if (key != null) {
-                    pressedKeys[event.getPointerId(i)] = key
-                    if (key.repeatable) startRepeat(key)
+                    val id = event.getPointerId(i)
+                    pressedKeys[id] = key
+                    if (key.repeatable) {
+                        startRepeat(key)
+                    } else if (key.alts.isNotEmpty() && popupPointer == -1) {
+                        schedulePending(key, id, event.getX(i))
+                    }
                     invalidate()
                 }
             }
@@ -184,11 +258,24 @@ class KeyboardView @JvmOverloads constructor(
                 var changed = false
                 for (i in 0 until event.pointerCount) {
                     val id = event.getPointerId(i)
+
+                    // Dedo con la ventanita abierta: solo elige alternativa.
+                    if (id == popupPointer) {
+                        val sel = nearestCell(event.getX(i))
+                        if (sel != popupSelected) {
+                            popupSelected = sel
+                            changed = true
+                        }
+                        continue
+                    }
+
                     val old = pressedKeys[id] ?: continue
+                    if (id == pendingPointer) pendingX = event.getX(i)
                     val now = keyAt(event.getX(i), event.getY(i))
                     if (now != null && now !== old) {
                         pressedKeys[id] = now
                         if (repeatKey === old) stopRepeat()
+                        if (id == pendingPointer) cancelPending()
                         changed = true
                     }
                 }
@@ -197,7 +284,20 @@ class KeyboardView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> {
                 val i = event.actionIndex
-                val pressed = pressedKeys.remove(event.getPointerId(i))
+                val id = event.getPointerId(i)
+
+                if (id == popupPointer) {
+                    // Soltar sobre una alternativa la escribe (como una tecla normal: respeta Shift).
+                    val alt = popupItems.getOrNull(popupSelected)
+                    pressedKeys.remove(id)
+                    closePopup()
+                    if (alt != null) listener?.onKey(Key(alt))
+                    invalidate()
+                    return true
+                }
+                if (id == pendingPointer) cancelPending()
+
+                val pressed = pressedKeys.remove(id)
                 if (pressed != null) {
                     val target = keyAt(event.getX(i), event.getY(i)) ?: pressed
                     val alreadyFiredByRepeat = repeatFired && repeatKey === pressed
@@ -210,11 +310,91 @@ class KeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> {
                 pressedKeys.clear()
                 stopRepeat()
+                cancelPending()
+                closePopup()
                 invalidate()
             }
         }
         return true
     }
+
+    // ------------------------------------------------------------------ pulsación larga
+
+    private fun schedulePending(key: Key, pointerId: Int, x: Float) {
+        pendingKey = key
+        pendingPointer = pointerId
+        pendingX = x
+        uiHandler.postDelayed(longPressRunnable, LONG_PRESS_MS)
+    }
+
+    private fun cancelPending() {
+        uiHandler.removeCallbacks(longPressRunnable)
+        pendingKey = null
+        pendingPointer = -1
+    }
+
+    /**
+     * Abre la ventanita sobre la tecla (en la fila de arriba; en la primera fila, sobre la propia fila).
+     * La alternativa principal queda justo encima de la tecla y las demás se extienden hacia el centro de la pantalla.
+     */
+    private fun openPopup() {
+        val key = pendingKey ?: return
+        val id = pendingPointer
+        if (pressedKeys[id] !== key || key.alts.isEmpty()) {
+            cancelPending()
+            return
+        }
+        val rect = keyRects.firstOrNull { it.first === key }?.second ?: return
+        val rowIndex = rows.indexOfFirst { fila -> fila.any { it === key } }
+        if (rowIndex < 0 || width == 0) return
+
+        val n = key.alts.size
+        val cellW = minOf(maxOf(rect.width(), 40f * density), width.toFloat() / n)
+        val total = cellW * n
+        val derecha = rect.centerX() > width / 2f
+        var x0 = if (derecha) rect.right - total else rect.left
+        x0 = x0.coerceIn(0f, maxOf(0f, width - total))
+
+        val rowH = height.toFloat() / rows.size
+        val fila = if (rowIndex > 0) rowIndex - 1 else rowIndex
+        val top = fila * rowH
+        val bottom = top + rowH
+
+        // En el lado derecho se dibuja al revés para que la alternativa principal siga sobre la tecla.
+        popupItems = if (derecha) key.alts.reversed() else key.alts
+        popupRects = List(n) { c -> RectF(x0 + c * cellW, top, x0 + (c + 1) * cellW, bottom) }
+        popupKey = key
+        popupPointer = id
+        popupSelected = nearestCell(pendingX)
+
+        uiHandler.removeCallbacks(longPressRunnable)
+        pendingKey = null
+        pendingPointer = -1
+        invalidate()
+    }
+
+    private fun nearestCell(x: Float): Int {
+        var mejor = -1
+        var distancia = Float.MAX_VALUE
+        popupRects.forEachIndexed { i, r ->
+            val d = Math.abs(r.centerX() - x)
+            if (d < distancia) {
+                distancia = d
+                mejor = i
+            }
+        }
+        return mejor
+    }
+
+    private fun closePopup() {
+        popupKey = null
+        popupPointer = -1
+        popupItems = emptyList()
+        popupRects = emptyList()
+        popupSelected = -1
+    }
+
+    // ------------------------------------------------------------------ repetición
 
     private fun startRepeat(key: Key) {
         stopRepeat()
@@ -231,11 +411,14 @@ class KeyboardView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         stopRepeat()
+        cancelPending()
+        closePopup()
         super.onDetachedFromWindow()
     }
 
     private companion object {
         const val REPEAT_START_DELAY_MS = 380L
         const val REPEAT_INTERVAL_MS = 45L
+        const val LONG_PRESS_MS = 350L
     }
 }
