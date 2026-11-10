@@ -113,3 +113,10 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 - **Emojis** (`ui/EmojiData`, `ui/EmojiPanel`): rejilla por categorías, filtrada con `Paint.hasGlyph`; recientes en `Prefs` (no se guardan en campos de contraseña).
 - **Pulsación larga** (`ui/KeyboardView`): 350 ms abre una tira de alternativas. Fila superior q–p: números 1–0; vocales y c: tildes/diéresis/cedilla; punto: `? ¿ ! ¡ : ; … - '`. Deslizar elige; soltar escribe.
 - **Diagnóstico 🔑**: toasts diferenciados (`vault_*`) y watchdog de 3 s si Bóveda no llega a abrirse.
+
+## Sugerencias, botón 123 y buscador de emojis (v0.4)
+
+- **Sugerencias en español** (`suggest/`): `Dictionary` lee `assets/es_words.txt` (local, ~2600 palabras por frecuencia). `Predictor` busca por prefijo sin importar tildes. `WordStore` guarda, cifrado con Keystore, solo palabras que NO están en el diccionario y su recuento (máx. 1500). Sin sugerencias, ni aprendizaje, en campos de contraseña, correo, URL o sin sugerencias. Ajuste para desactivar el aprendizaje y botón para borrarlo.
+- **Botón 123** junto al portapapeles: alterna entre teclado numérico y letras.
+- **Buscador de emojis** (`ui/EmojiSearch`): tabla de palabras clave en español. Se teclea con el propio teclado; la consulta solo vive en memoria.
+- **Bóveda**: ajuste «Desbloqueo del teclado» (pedir siempre / recordar 1, 5 o 15 min). La clave sigue solo en memoria; solo cambia el temporizador.
