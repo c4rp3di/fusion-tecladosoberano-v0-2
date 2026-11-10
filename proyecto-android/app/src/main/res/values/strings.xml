@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Teclado Soberano</string>
+    <string name="ime_name">Teclado Soberano</string>
+    <string name="subtype_es">Español</string>
+
+    <string name="desc_vault">Abrir La Bóveda</string>
+    <string name="desc_clipboard">Historial del portapapeles</string>
+
+    <string name="vault_no_instalada">La Bóveda no está instalada.</string>
+    <string name="vault_firma_distinta">La Bóveda no está firmada con la misma llave que este teclado. No se envía nada.</string>
+    <string name="vault_en_curso">Ya hay una petición abierta en La Bóveda.</string>
+    <string name="vault_error">No se pudo obtener la credencial.</string>
+    <string name="vault_no_inicializada">Primero crea tu bóveda en La Bóveda.</string>
+
+    <string name="settings_intro">Teclado 100 % offline. Sin permiso de Internet y sin telemetría.</string>
+    <string name="settings_enable">1. Activar teclado</string>
+    <string name="settings_pick">2. Elegir teclado</string>
+    <string name="settings_accent">Color de acento</string>
+    <string name="settings_background">Fondo del teclado</string>
+    <string name="settings_test_hint">Escribe aquí para probar</string>
+</resources>
