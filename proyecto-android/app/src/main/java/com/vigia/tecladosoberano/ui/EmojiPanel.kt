@@ -28,6 +28,7 @@ class EmojiPanel(context: Context) : LinearLayout(context) {
     var onEmoji: ((String) -> Unit)? = null
     var onDelete: (() -> Unit)? = null
     var onClose: (() -> Unit)? = null
+    var onSearch: (() -> Unit)? = null
 
     private val density = resources.displayMetrics.density
     private var theme = KeyboardTheme.DEFAULT
@@ -38,6 +39,7 @@ class EmojiPanel(context: Context) : LinearLayout(context) {
     private val scroll = ScrollView(context)
     private val btnBack = barButton(context.getString(R.string.panel_back))
     private val btnDelete = barButton("⌫")
+    private val searchRow = TextView(context)
     private val tabs = ArrayList<TextView>()
     private val glyphPaint = Paint()
     private val cache = HashMap<Int, List<String>>()
@@ -52,6 +54,16 @@ class EmojiPanel(context: Context) : LinearLayout(context) {
 
     init {
         orientation = VERTICAL
+
+        searchRow.text = context.getString(R.string.emoji_buscar)
+        searchRow.textSize = 14f
+        searchRow.gravity = Gravity.CENTER_VERTICAL
+        searchRow.setPadding(dp(14), 0, dp(14), 0)
+        searchRow.isClickable = true
+        searchRow.setOnClickListener { onSearch?.invoke() }
+        val lpBusca = LayoutParams(LayoutParams.MATCH_PARENT, dp(36))
+        lpBusca.setMargins(dp(6), dp(4), dp(6), dp(2))
+        addView(searchRow, lpBusca)
 
         grid.orientation = VERTICAL
         scroll.addView(grid)
@@ -90,6 +102,8 @@ class EmojiPanel(context: Context) : LinearLayout(context) {
         setBackgroundColor(t.background)
         btnBack.setTextColor(t.text)
         btnBack.setPressableBackground(t.keyFunction, pressedColorFor(t, t.keyFunction), dp(8).toFloat())
+        searchRow.setTextColor(0xFF8B93A0.toInt())
+        searchRow.background = rounded(t.keyFunction)
         btnDelete.setTextColor(t.text)
         btnDelete.background = rounded(t.keyFunction)
         selectTabVisual()
