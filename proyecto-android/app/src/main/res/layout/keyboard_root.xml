@@ -44,6 +44,17 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/btn_numeric"
+            android:layout_width="48dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/desc_numeric"
+            android:gravity="center"
+            android:text="123"
+            android:textColor="@color/ks_text"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
             android:id="@+id/btn_clipboard"
             android:layout_width="52dp"
             android:layout_height="match_parent"
