@@ -9,9 +9,20 @@
 
     <string name="vault_no_instalada">La Bóveda no está instalada.</string>
     <string name="vault_firma_distinta">La Bóveda no está firmada con la misma llave que este teclado. No se envía nada.</string>
+    <string name="vault_sin_permiso">El teclado no tiene el permiso de firma de La Bóveda. Reinstala las dos apps firmadas con la misma llave.</string>
+    <string name="vault_sin_puente">La Bóveda instalada no incluye el puente con el teclado. Instala la versión nueva.</string>
+    <string name="vault_no_abrio">La Bóveda no llegó a abrirse. Android pudo bloquear su apertura desde el teclado.</string>
     <string name="vault_en_curso">Ya hay una petición abierta en La Bóveda.</string>
     <string name="vault_error">No se pudo obtener la credencial.</string>
     <string name="vault_no_inicializada">Primero crea tu bóveda en La Bóveda.</string>
+
+    <string name="panel_back">ABC</string>
+    <string name="clip_title">Portapapeles</string>
+    <string name="clip_clear">Borrar todo</string>
+    <string name="clip_delete">Borrar del historial</string>
+    <string name="clip_empty">Aún no hay nada copiado.\nCopia un texto y aparecerá aquí.</string>
+    <string name="emoji_recientes">Recientes</string>
+    <string name="emoji_sin_recientes">Aún no has usado ningún emoji.</string>
 
     <string name="settings_intro">Teclado 100 % offline. Sin permiso de Internet y sin telemetría.</string>
     <string name="settings_enable">1. Activar teclado</string>
