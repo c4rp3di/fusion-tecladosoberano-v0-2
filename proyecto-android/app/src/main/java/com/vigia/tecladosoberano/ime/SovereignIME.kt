@@ -380,6 +380,94 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         }
     }
 
+    // ------------------------------------------------------------------ paneles
+
+    private fun buildPanels(container: FrameLayout) {
+        panelContainer = container
+
+        val emoji = EmojiPanel(this)
+        emoji.onEmoji = { e -> insertEmoji(e) }
+        emoji.onDelete = { actions.backspace() }
+        emoji.onClose = { showPanel(Panel.NONE) }
+        emoji.onSearch = { startSearch() }
+
+        val clip = ClipboardPanel(this)
+        clip.onInsert = { texto ->
+            currentInputConnection?.commitText(texto, 1)
+            showPanel(Panel.NONE)
+        }
+        clip.onDelete = { i ->
+            clipWatcher.descartarActual()
+            clipStore.remove(i)
+            refreshClipboardPanel()
+        }
+        clip.onClear = {
+            clipWatcher.descartarActual()
+            clipStore.clear()
+            refreshClipboardPanel()
+        }
+        clip.onClose = { showPanel(Panel.NONE) }
+
+        val params = { FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
+        container.removeAllViews()
+        container.addView(emoji, params())
+        container.addView(clip, params())
+        emoji.visibility = View.GONE
+        clip.visibility = View.GONE
+        emojiPanel = emoji
+        clipboardPanel = clip
+    }
+
+    private fun showPanel(requested: Panel) {
+        // En campos de contraseña no hay historial de portapapeles.
+        val panel = if (requested == Panel.CLIPBOARD && state.isPassword) Panel.NONE else requested
+        state.panel = panel
+
+        val teclas = keyboardView ?: return
+        val contenedor = panelContainer ?: return
+        val emoji = emojiPanel ?: return
+        val clip = clipboardPanel ?: return
+
+        if (panel == Panel.NONE) {
+            contenedor.visibility = View.GONE
+            teclas.visibility = View.VISIBLE
+            return
+        }
+
+        if (teclas.height > 0) lastKeyboardHeight = teclas.height
+        if (lastKeyboardHeight <= 0) lastKeyboardHeight = (4 * 54 * resources.displayMetrics.density).toInt()
+        val lp = contenedor.layoutParams
+        lp.height = lastKeyboardHeight
+        contenedor.layoutParams = lp
+
+        teclas.visibility = View.GONE
+        contenedor.visibility = View.VISIBLE
+        if (panel == Panel.EMOJI) {
+            clip.visibility = View.GONE
+            emoji.visibility = View.VISIBLE
+            emoji.setRecents(prefs.recentEmojis)
+            emoji.open()
+        } else {
+            emoji.visibility = View.GONE
+            clip.visibility = View.VISIBLE
+            clipWatcher.capture(true)
+            clip.setItems(clipStore.all())
+        }
+    }
+
+    private fun insertEmoji(emoji: String) {
+        currentInputConnection?.commitText(emoji, 1)
+        // Los recientes no se actualizan en contraseñas.
+        if (!state.isPassword) {
+            prefs.addRecentEmoji(emoji)
+            emojiPanel?.setRecents(prefs.recentEmojis)
+        }
+    }
+
+    private fun refreshClipboardPanel() {
+        if (state.panel == Panel.CLIPBOARD) clipboardPanel?.setItems(clipStore.all())
+    }
+
     // ------------------------------------------------------------------ La Bóveda
 
     private fun onVaultPressed(forceNew: Boolean) {
