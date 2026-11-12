@@ -120,3 +120,10 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 - **Botón 123** junto al portapapeles: alterna entre teclado numérico y letras.
 - **Buscador de emojis** (`ui/EmojiSearch`): tabla de palabras clave en español. Se teclea con el propio teclado; la consulta solo vive en memoria.
 - **Bóveda**: ajuste «Desbloqueo del teclado» (pedir siempre / recordar 1, 5 o 15 min). La clave sigue solo en memoria; solo cambia el temporizador.
+
+## v0.5: personalización, precisión y sugerencias avanzadas
+
+- `settings/KeyboardEditorActivity`: editor con vista previa. Las medidas (`KbMetrics`) se guardan en `Prefs` (perfil vertical/horizontal) y el servicio las aplica al instante por `OnSharedPreferenceChangeListener`.
+- `ui/KeyboardView`: alturas por fila, pesos de teclas especiales, separación, «imán» (la letra más probable según el prefijo favorece la tecla vecina) y decisión de tecla al tocar/soltar.
+- `suggest/`: `Dictionary` indexado por forma sin tildes; `Predictor` (atajos, prefijos, correcciones por distancia de edición, siguiente palabra); `CountStore` + `SecureFile` (cifrado Keystore) para `WordStore` y `BigramStore`; `ShortcutStore` para atajos.
+- Privacidad: nada de esto sale del móvil; sin aprendizaje ni atajos en contraseñas, correo o URL; las opciones que guardan más información (palabras frecuentes, pares) están apagadas por defecto.
