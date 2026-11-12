@@ -14,7 +14,8 @@ class Predictor(
     private val dictionary: Dictionary,
     private val store: WordStore,
     private val atajos: ShortcutStore,
-    private val pares: BigramStore
+    private val pares: BigramStore,
+    private val bloqueadas: BlockStore
 ) {
     /** Se activa desde los ajustes. */
     var usarFrecuentes = false
@@ -23,7 +24,7 @@ class Predictor(
     fun suggest(prefijo: String, previa: String?, max: Int = 3): List<Sug> {
         val salida = ArrayList<Sug>(max)
         if (prefijo.isEmpty()) {
-            if (previa != null) for (w in siguientes(previa, max)) salida.add(Sug(w, w))
+            if (previa != null) for (w in siguientes(previa, max)) if (!bloqueadas.bloqueada(w)) salida.add(Sug(w, w))
             return salida
         }
         val p = Dictionary.normalizar(prefijo)
@@ -160,6 +161,7 @@ class Predictor(
     // ------------------------------------------------------------------ utilidades
 
     private fun anadir(lista: MutableList<Sug>, palabra: String, prefijo: String) {
+        if (bloqueadas.bloqueada(palabra)) return
         val w = adaptarMayusculas(prefijo, palabra)
         if (w == prefijo) return
         if (lista.none { it.insertar == w }) lista.add(Sug(w, w))
