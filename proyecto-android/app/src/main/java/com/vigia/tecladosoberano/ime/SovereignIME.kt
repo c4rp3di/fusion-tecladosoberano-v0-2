@@ -546,6 +546,9 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val m = prefs.metrics(horizontal)
         kv.metrics = m
+        // Marco alrededor de todo el teclado (barra, teclas y paneles).
+        val d = resources.displayMetrics.density
+        rootView?.setPadding((m.padL * d).toInt(), (m.padT * d).toInt(), (m.padR * d).toInt(), (m.padB * d).toInt())
         val lp = kv.layoutParams as? android.widget.LinearLayout.LayoutParams ?: return
         if (m.oneHand != 0 && !horizontal) {
             lp.width = (resources.displayMetrics.widthPixels * 0.8f).toInt()
