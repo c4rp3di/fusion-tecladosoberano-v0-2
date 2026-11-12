@@ -22,11 +22,11 @@
     </queries>
 
     <application
-        android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.TecladoSoberano"
@@ -54,6 +54,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".settings.KeyboardEditorActivity"
+            android:exported="false"
+            android:label="Editor del teclado" />
+
+        <activity
+            android:name=".settings.ShortcutsActivity"
+            android:exported="false"
+            android:label="Atajos" />
 
     </application>
 
