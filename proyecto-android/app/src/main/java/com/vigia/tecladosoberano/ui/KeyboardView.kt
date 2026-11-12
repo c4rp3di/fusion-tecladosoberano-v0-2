@@ -12,6 +12,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import com.vigia.tecladosoberano.ime.ShiftState
+import com.vigia.tecladosoberano.settings.KbMetrics
 
 /**
  * Vista de teclado dibujada con Canvas: ligera, sin dependencias y con soporte
@@ -48,13 +49,34 @@ class KeyboardView @JvmOverloads constructor(
             }
         }
 
+    /** Medidas editables (alturas, anchos, separación, sensibilidad). */
+    var metrics: KbMetrics = KbMetrics()
+        set(value) {
+            field = value
+            requestLayout()
+            computeRects()
+            invalidate()
+        }
+
+    /** Si no es null, fuerza el perfil horizontal/vertical (la vista previa del editor). */
+    var forceLandscape: Boolean? = null
+        set(value) {
+            field = value
+            requestLayout()
+        }
+
+    /** Probabilidad de la siguiente letra (minúscula) según lo escrito: el «iman» hacia la letra probable. */
+    @Volatile
+    var nextLetter: Map<Char, Float>? = null
+
     private var rows: List<List<Key>> = emptyList()
+    private var rowTops = FloatArray(0)
     private val keyRects = ArrayList<Pair<Key, RectF>>()
     private val pressedKeys = HashMap<Int, Key>()
 
     private val density = resources.displayMetrics.density
     private val scaledDensity = resources.displayMetrics.scaledDensity
-    private val gap = 2.5f * density
+    private val gap: Float get() = metrics.gapDp * density
     private val corner = 8f * density
     private val relief = 2f * density
 
@@ -104,14 +126,24 @@ class KeyboardView @JvmOverloads constructor(
     }
 
     private fun rowHeightPx(): Float {
-        val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        return (if (landscape) 44f else 54f) * density
+        val landscape = forceLandscape ?: (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        return (if (landscape) 44f else 54f) * density * metrics.height
+    }
+
+    private fun rowScale(i: Int): Float = if (rows.size == 4) metrics.rows[i].coerceIn(0.5f, 1.8f) else 1f
+
+    private fun keyWeight(key: Key): Float = key.weight * when (key.type) {
+        KeyType.SPACE -> metrics.space
+        KeyType.SHIFT, KeyType.DELETE, KeyType.ENTER,
+        KeyType.TO_LETTERS, KeyType.TO_SYMBOLS, KeyType.TO_SYMBOLS2, KeyType.TO_NUMERIC -> metrics.func
+        else -> 1f
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val w = MeasureSpec.getSize(widthMeasureSpec)
-        val h = (rowHeightPx() * rows.size.coerceAtLeast(1) + gap).toInt()
-        setMeasuredDimension(w, h)
+        var h = gap
+        for (i in 0 until rows.size.coerceAtLeast(1)) h += rowHeightPx() * rowScale(i)
+        setMeasuredDimension(w, h.toInt())
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -122,23 +154,56 @@ class KeyboardView @JvmOverloads constructor(
     private fun computeRects() {
         keyRects.clear()
         if (rows.isEmpty() || width == 0 || height == 0) return
-        val rowH = height.toFloat() / rows.size
+        val suma = (0 until rows.size).sumOf { rowScale(it).toDouble() }.toFloat()
+        rowTops = FloatArray(rows.size + 1)
+        for (i in rows.indices) rowTops[i + 1] = rowTops[i] + height * rowScale(i) / suma
         rows.forEachIndexed { r, row ->
-            val total = row.sumOf { it.weight.toDouble() }.toFloat()
+            val total = row.sumOf { keyWeight(it).toDouble() }.toFloat()
             var x = 0f
             for (key in row) {
-                val w = width * key.weight / total
-                keyRects.add(key to RectF(x, r * rowH, x + w, (r + 1) * rowH))
+                val w = width * keyWeight(key) / total
+                keyRects.add(key to RectF(x, rowTops[r], x + w, rowTops[r + 1]))
                 x += w
             }
         }
     }
 
+    /**
+     * Tecla bajo el dedo. Con «iman», entre letras vecinas gana la que está más cerca del dedo
+     * pero favoreciendo la letra probable según lo que se lleva escrito.
+     */
     private fun keyAt(x: Float, y: Float): Key? {
-        for ((key, rect) in keyRects) {
-            if (rect.contains(x, y)) return key
+        var directa: Pair<Key, RectF>? = null
+        for (par in keyRects) {
+            if (par.second.contains(x, y)) {
+                directa = par
+                break
+            }
         }
-        return null
+        val d = directa ?: return null
+        val probs = nextLetter
+        val iman = metrics.magnet
+        if (iman <= 0f || probs == null || d.first.type != KeyType.CHAR) return d.first
+
+        var mejor = d.first
+        var mejorPuntos = Float.MAX_VALUE
+        for ((key, rect) in keyRects) {
+            if (key.type != KeyType.CHAR || key.label.length != 1) continue
+            // Solo teclas a menos de ~40 % de su ancho del dedo.
+            val dx = Math.max(Math.max(rect.left - x, x - rect.right), 0f)
+            val dy = Math.max(Math.max(rect.top - y, y - rect.bottom), 0f)
+            if (dx > rect.width() * 0.4f || dy > 0f) continue
+            val cx = (x - rect.centerX()) / rect.width()
+            val cy = (y - rect.centerY()) / rect.height() * 0.5f
+            val dist = Math.sqrt((cx * cx + cy * cy).toDouble()).toFloat()
+            val p = probs[key.label[0].lowercaseChar()] ?: 0f
+            val puntos = dist / (1f + iman * 4f * p)
+            if (puntos < mejorPuntos) {
+                mejorPuntos = puntos
+                mejor = key
+            }
+        }
+        return mejor
     }
 
     // ------------------------------------------------------------------ dibujo
@@ -184,7 +249,7 @@ class KeyboardView @JvmOverloads constructor(
                 textPaint.color = textColor
                 // Por puntos de código: un emoji (2 chars) cuenta como un símbolo y se dibuja grande.
                 val simbolos = label.codePointCount(0, label.length)
-                textPaint.textSize = (if (simbolos > 1) 15f else 22f) * scaledDensity
+                textPaint.textSize = (if (simbolos > 1) 15f else 22f) * scaledDensity * metrics.text
                 val baseline = bodyRect.centerY() - (textPaint.descent() + textPaint.ascent()) / 2f
                 canvas.drawText(label, bodyRect.centerX(), baseline, textPaint)
             }
@@ -271,6 +336,8 @@ class KeyboardView @JvmOverloads constructor(
 
                     val old = pressedKeys[id] ?: continue
                     if (id == pendingPointer) pendingX = event.getX(i)
+                    // Con «decidir al tocar» la tecla queda fijada por el primer toque.
+                    if (!metrics.onRelease) continue
                     val now = keyAt(event.getX(i), event.getY(i))
                     if (now != null && now !== old) {
                         pressedKeys[id] = now
@@ -299,7 +366,7 @@ class KeyboardView @JvmOverloads constructor(
 
                 val pressed = pressedKeys.remove(id)
                 if (pressed != null) {
-                    val target = keyAt(event.getX(i), event.getY(i)) ?: pressed
+                    val target = if (metrics.onRelease) keyAt(event.getX(i), event.getY(i)) ?: pressed else pressed
                     val alreadyFiredByRepeat = repeatFired && repeatKey === pressed
                     if (repeatKey === pressed) stopRepeat()
                     if (!alreadyFiredByRepeat) listener?.onKey(target)
@@ -355,10 +422,9 @@ class KeyboardView @JvmOverloads constructor(
         var x0 = if (derecha) rect.right - total else rect.left
         x0 = x0.coerceIn(0f, maxOf(0f, width - total))
 
-        val rowH = height.toFloat() / rows.size
         val fila = if (rowIndex > 0) rowIndex - 1 else rowIndex
-        val top = fila * rowH
-        val bottom = top + rowH
+        val top = rowTops[fila]
+        val bottom = rowTops[fila + 1]
 
         // En el lado derecho se dibuja al revés para que la alternativa principal siga sobre la tecla.
         popupItems = if (derecha) key.alts.reversed() else key.alts
