@@ -14,6 +14,7 @@ import com.vigia.tecladosoberano.clipboard.ClipboardWatcher
 import com.vigia.tecladosoberano.settings.Prefs
 import com.vigia.tecladosoberano.suggest.Dictionary
 import com.vigia.tecladosoberano.suggest.BigramStore
+import com.vigia.tecladosoberano.suggest.BlockStore
 import com.vigia.tecladosoberano.suggest.Predictor
 import com.vigia.tecladosoberano.suggest.ShortcutStore
 import com.vigia.tecladosoberano.suggest.Sug
@@ -61,6 +62,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     private lateinit var wordStore: WordStore
     private lateinit var bigramStore: BigramStore
     private lateinit var shortcutStore: ShortcutStore
+    private lateinit var blockStore: BlockStore
     private lateinit var predictor: Predictor
     private var currentPrefix = ""
     private var sugList: List<Sug> = emptyList()
@@ -110,7 +112,8 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         wordStore = WordStore(this)
         bigramStore = BigramStore(this)
         shortcutStore = ShortcutStore(this)
-        predictor = Predictor(dictionary, wordStore, shortcutStore, bigramStore)
+        blockStore = BlockStore(this)
+        predictor = Predictor(dictionary, wordStore, shortcutStore, bigramStore, blockStore)
         applyPredictorOptions()
         prefs.registerListener(prefsListener)
 
@@ -167,6 +170,11 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         for (i in 0..2) {
             sugViews[i] = root.findViewById<android.widget.TextView>(ids[i]).also { v ->
                 v.setOnClickListener { (v.tag as? Sug)?.let { acceptSuggestion(it) } }
+                // Pulsación larga: quitar la sugerencia para siempre.
+                v.setOnLongClickListener {
+                    (v.tag as? Sug)?.let { ocultarSugerencia(it) }
+                    true
+                }
             }
         }
 
@@ -308,6 +316,17 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         }
     }
 
+    private fun ocultarSugerencia(s: Sug) {
+        if (s.mostrar != s.insertar) {
+            aviso("Los atajos se gestionan en la app del teclado")
+            return
+        }
+        blockStore.bloquear(s.insertar)
+        wordStore.forget(s.insertar)
+        aviso("«" + s.insertar + "» ya no se sugerirá")
+        refreshSuggestions()
+    }
+
     private fun acceptSuggestion(s: Sug) {
         val ic = currentInputConnection ?: return
         val antes = ic.getTextBeforeCursor(80, 0)
@@ -329,13 +348,24 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     /** Carga el diccionario nuevo fuera del hilo principal y lo cambia cuando está listo. */
     private fun recargarDiccionario() {
         Thread {
+            // También se releen los almacenes cifrados: la app puede haberlos cambiado (atajos, borrar lo aprendido…).
             val nuevo = Dictionary(this)
-            rootView?.post {
+            val palabras = WordStore(this)
+            val pares = BigramStore(this)
+            val atajos = ShortcutStore(this)
+            val bloq = BlockStore(this)
+            val aplicar = Runnable {
                 dictionary = nuevo
-                predictor = Predictor(nuevo, wordStore, shortcutStore, bigramStore)
+                wordStore = palabras
+                bigramStore = pares
+                shortcutStore = atajos
+                blockStore = bloq
+                predictor = Predictor(nuevo, palabras, atajos, pares, bloq)
                 applyPredictorOptions()
                 refreshSuggestions()
-            } ?: run { dictionary = nuevo }
+            }
+            val vista = rootView
+            if (vista != null) vista.post(aplicar) else aplicar.run()
         }.start()
     }
 
