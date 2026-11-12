@@ -26,6 +26,7 @@ class KeyboardEditorActivity : Activity() {
 
     private lateinit var prefs: Prefs
     private lateinit var preview: KeyboardView
+    private lateinit var marco: android.widget.FrameLayout
     private var landscape = false
     private lateinit var m: KbMetrics
     private val panel by lazy { LinearLayout(this).apply { orientation = LinearLayout.VERTICAL } }
@@ -47,7 +48,13 @@ class KeyboardEditorActivity : Activity() {
             metrics = m
             forceLandscape = landscape
         }
-        raiz.addView(preview, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // El marco se ve con el color de fondo del teclado, igual que en el teclado real.
+        marco = android.widget.FrameLayout(this).apply {
+            setBackgroundColor(KeyboardTheme.from(prefs).background)
+        }
+        marco.addView(preview, android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        aplicarMarco()
+        raiz.addView(marco, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val scroll = ScrollView(this)
         scroll.addView(panel)
@@ -80,6 +87,16 @@ class KeyboardEditorActivity : Activity() {
         panel.addView(titulo("Teclas especiales"))
         panel.addView(slider("Ancho de la barra espaciadora", 0.6f, 2.2f, m.space, { "%.0f %%".format(Locale.US, it * 100) }) { m.space = it })
         panel.addView(slider("Ancho de Shift, borrar e Intro", 0.7f, 1.8f, m.func, { "%.0f %%".format(Locale.US, it * 100) }) { m.func = it })
+
+        panel.addView(titulo("Marco (espacio alrededor del teclado)"))
+        panel.addView(texto("Como cambiar el tamaño de una imagen: deja un borde vacío alrededor. El general mueve los cuatro a la vez; abajo puedes afinar cada lado.", 12f, false, dim = true))
+        panel.addView(slider("Marco general", 0f, 48f, maxOf(m.padL, m.padT, m.padR, m.padB), { "%.0f dp".format(Locale.US, it) }) {
+            m.padL = it; m.padT = it; m.padR = it; m.padB = it
+        })
+        panel.addView(slider("Izquierda", 0f, 48f, m.padL, { "%.0f dp".format(Locale.US, it) }) { m.padL = it })
+        panel.addView(slider("Arriba", 0f, 48f, m.padT, { "%.0f dp".format(Locale.US, it) }) { m.padT = it })
+        panel.addView(slider("Derecha", 0f, 48f, m.padR, { "%.0f dp".format(Locale.US, it) }) { m.padR = it })
+        panel.addView(slider("Abajo", 0f, 48f, m.padB, { "%.0f dp".format(Locale.US, it) }) { m.padB = it })
 
         panel.addView(titulo("Aspecto"))
         panel.addView(slider("Separación entre teclas", 0f, 6f, m.gapDp, { "%.1f dp".format(Locale.US, it) }) { m.gapDp = it })
@@ -128,13 +145,21 @@ class KeyboardEditorActivity : Activity() {
         m = prefs.metrics(landscape)
         preview.forceLandscape = landscape
         preview.metrics = m
+        aplicarMarco()
         construirControles()
     }
 
     private fun guardar() {
         prefs.saveMetrics(landscape, m)
         preview.metrics = m
+        aplicarMarco()
     }
+
+    private fun aplicarMarco() {
+        marco.setPadding(dp(m.padL), dp(m.padT), dp(m.padR), dp(m.padB))
+    }
+
+    private fun dp(v: Float): Int = (v * resources.displayMetrics.density).toInt()
 
     private fun slider(
         nombre: String, min: Float, max: Float, valor: Float,
