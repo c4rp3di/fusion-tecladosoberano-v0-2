@@ -13,7 +13,10 @@ import com.vigia.tecladosoberano.clipboard.ClipboardStore
 import com.vigia.tecladosoberano.clipboard.ClipboardWatcher
 import com.vigia.tecladosoberano.settings.Prefs
 import com.vigia.tecladosoberano.suggest.Dictionary
+import com.vigia.tecladosoberano.suggest.BigramStore
 import com.vigia.tecladosoberano.suggest.Predictor
+import com.vigia.tecladosoberano.suggest.ShortcutStore
+import com.vigia.tecladosoberano.suggest.Sug
 import com.vigia.tecladosoberano.suggest.WordStore
 import com.vigia.tecladosoberano.ui.EmojiSearch
 import com.vigia.tecladosoberano.ui.ClipboardPanel
@@ -56,9 +59,29 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     // Sugerencias en español (todo local)
     private lateinit var dictionary: Dictionary
     private lateinit var wordStore: WordStore
+    private lateinit var bigramStore: BigramStore
+    private lateinit var shortcutStore: ShortcutStore
     private lateinit var predictor: Predictor
     private var currentPrefix = ""
-    private var sugList: List<String> = emptyList()
+    private var sugList: List<Sug> = emptyList()
+
+    /** Palabras casi iguales a una del diccionario: solo se aprenden si se repiten (así no se aprenden erratas). */
+    private val dudosas = HashMap<String, Int>()
+
+    private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, clave ->
+        val c = clave ?: return@OnSharedPreferenceChangeListener
+        if (c.startsWith("m") || c == "accent" || c == "background" || c.startsWith("bar_") ||
+            c == "learn_words" || c == "learn_common" || c == "next_word" || c == "dict_version"
+        ) {
+            if (c == "dict_version") recargarDiccionario()
+            rootView?.post {
+                applyTheme()
+                applyMetrics()
+                applyPredictorOptions()
+                refreshKeyboard()
+            }
+        }
+    }
 
     // Buscador de emojis: se escribe con las teclas del propio teclado, la consulta no sale de memoria
     private var searching = false
@@ -85,7 +108,11 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
         dictionary = Dictionary(this)
         wordStore = WordStore(this)
-        predictor = Predictor(dictionary, wordStore)
+        bigramStore = BigramStore(this)
+        shortcutStore = ShortcutStore(this)
+        predictor = Predictor(dictionary, wordStore, shortcutStore, bigramStore)
+        applyPredictorOptions()
+        prefs.registerListener(prefsListener)
 
         vault = VaultBridge(this)
         vault.alCambiar = { updateVaultIndicator() }
@@ -98,6 +125,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onDestroy() {
+        prefs.unregisterListener(prefsListener)
         clipWatcher.stop()
         vault.olvidar()
         super.onDestroy()
@@ -138,7 +166,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         val ids = intArrayOf(R.id.suggestion_1, R.id.suggestion_2, R.id.suggestion_3)
         for (i in 0..2) {
             sugViews[i] = root.findViewById<android.widget.TextView>(ids[i]).also { v ->
-                v.setOnClickListener { acceptSuggestion(v.text.toString()) }
+                v.setOnClickListener { (v.tag as? Sug)?.let { acceptSuggestion(it) } }
             }
         }
 
@@ -146,6 +174,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         buildSearchBar(root)
 
         applyTheme()
+        applyMetrics()
         applyFieldMode()
         refreshKeyboard()
         updateVaultIndicator()
@@ -159,6 +188,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         super.onConfigurationChanged(newConfig)
         // Las alturas cambian al girar: se cierra el panel y se recalculan al abrir el siguiente.
         lastKeyboardHeight = 0
+        applyMetrics()
         if (searching) stopSearch(false)
         if (state.panel != Panel.NONE) showPanel(Panel.NONE)
     }
@@ -236,20 +266,34 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         if (!suggestionsActive()) {
             currentPrefix = ""
             sugList = emptyList()
+            keyboardView?.nextLetter = null
             showSuggestions()
             return
         }
         val ic = currentInputConnection
-        val antes = ic?.getTextBeforeCursor(40, 0)
+        val antes = ic?.getTextBeforeCursor(80, 0)
         val seleccion = ic?.getSelectedText(0)
         if (antes == null || !seleccion.isNullOrEmpty()) {
             currentPrefix = ""
             sugList = emptyList()
+            keyboardView?.nextLetter = null
         } else {
             currentPrefix = trailingLetters(antes)
-            sugList = predictor.suggest(currentPrefix, 3)
+            val previa = palabraPrevia(antes, currentPrefix)
+            sugList = predictor.suggest(currentPrefix, previa, 3)
+            keyboardView?.nextLetter =
+                if (state.mode == KeyboardMode.LETTERS) predictor.siguientesLetras(currentPrefix) else null
         }
         showSuggestions()
+    }
+
+    /** La palabra anterior a [actual] si van separadas por un solo espacio; si no, null. */
+    private fun palabraPrevia(antes: CharSequence, actual: String): String? {
+        val resto = antes.substring(0, antes.length - actual.length)
+        if (resto.isEmpty() || resto.last() != ' ') return null
+        val sinEspacio = resto.dropLast(1)
+        if (sinEspacio.isEmpty() || !Character.isLetter(sinEspacio.last())) return null
+        return trailingLetters(sinEspacio).lowercase()
     }
 
     /** La mejor sugerencia va en el centro; la 2.ª a la izquierda y la 3.ª a la derecha. */
@@ -257,19 +301,23 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         val orden = intArrayOf(1, 0, 2)
         for (slot in 0..2) {
             val v = sugViews[orden[slot]] ?: continue
-            v.text = sugList.getOrNull(slot) ?: ""
-            v.isClickable = v.text.isNotEmpty()
+            val s = sugList.getOrNull(slot)
+            v.text = s?.mostrar ?: ""
+            v.tag = s
+            v.isClickable = s != null
         }
     }
 
-    private fun acceptSuggestion(palabra: String) {
-        if (palabra.isEmpty()) return
+    private fun acceptSuggestion(s: Sug) {
         val ic = currentInputConnection ?: return
+        val antes = ic.getTextBeforeCursor(80, 0)
+        val previa = if (antes != null) palabraPrevia(antes, currentPrefix) else null
         ic.beginBatchEdit()
         if (currentPrefix.isNotEmpty()) ic.deleteSurroundingText(currentPrefix.length, 0)
-        ic.commitText("$palabra ", 1)
+        ic.commitText(s.insertar + " ", 1)
         ic.endBatchEdit()
-        if (canLearn()) learn(palabra)
+        // Un atajo no se aprende como palabra.
+        if (s.mostrar == s.insertar) registrar(s.insertar, previa)
         actions.updateAutoCaps()
         refreshKeyboard()
         refreshSuggestions()
@@ -278,104 +326,58 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     private fun canLearn(): Boolean =
         prefs.learnWords && currentField.learnAllowed && !state.isPassword && !searching
 
-    /** Aprende la palabra que hay justo antes del cursor si no está en el diccionario. */
+    /** Carga el diccionario nuevo fuera del hilo principal y lo cambia cuando está listo. */
+    private fun recargarDiccionario() {
+        Thread {
+            val nuevo = Dictionary(this)
+            rootView?.post {
+                dictionary = nuevo
+                predictor = Predictor(nuevo, wordStore, shortcutStore, bigramStore)
+                applyPredictorOptions()
+                refreshSuggestions()
+            } ?: run { dictionary = nuevo }
+        }.start()
+    }
+
+    private fun applyPredictorOptions() {
+        predictor.usarFrecuentes = prefs.learnCommon
+        predictor.usarPares = prefs.nextWord
+    }
+
+    /** Al cerrar una palabra (espacio, signo o intro): se anota si procede. */
     private fun learnWordBeforeCursor() {
         if (!canLearn()) return
-        val antes = currentInputConnection?.getTextBeforeCursor(40, 0) ?: return
-        learn(trailingLetters(antes))
+        val antes = currentInputConnection?.getTextBeforeCursor(80, 0) ?: return
+        val palabra = trailingLetters(antes)
+        if (palabra.length < 3) return
+        registrar(palabra, palabraPrevia(antes, palabra))
     }
 
-    private fun learn(palabra: String) {
-        if (palabra.length < 3 || dictionary.contiene(palabra)) return
-        wordStore.learn(palabra)
-    }
-
-    // ------------------------------------------------------------------ paneles
-
-    private fun buildPanels(container: FrameLayout) {
-        panelContainer = container
-
-        val emoji = EmojiPanel(this)
-        emoji.onEmoji = { e -> insertEmoji(e) }
-        emoji.onDelete = { actions.backspace() }
-        emoji.onClose = { showPanel(Panel.NONE) }
-        emoji.onSearch = { startSearch() }
-
-        val clip = ClipboardPanel(this)
-        clip.onInsert = { texto ->
-            currentInputConnection?.commitText(texto, 1)
-            showPanel(Panel.NONE)
-        }
-        clip.onDelete = { i ->
-            clipWatcher.descartarActual()
-            clipStore.remove(i)
-            refreshClipboardPanel()
-        }
-        clip.onClear = {
-            clipWatcher.descartarActual()
-            clipStore.clear()
-            refreshClipboardPanel()
-        }
-        clip.onClose = { showPanel(Panel.NONE) }
-
-        val params = { FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
-        container.removeAllViews()
-        container.addView(emoji, params())
-        container.addView(clip, params())
-        emoji.visibility = View.GONE
-        clip.visibility = View.GONE
-        emojiPanel = emoji
-        clipboardPanel = clip
-    }
-
-    private fun showPanel(requested: Panel) {
-        // En campos de contraseña no hay historial de portapapeles.
-        val panel = if (requested == Panel.CLIPBOARD && state.isPassword) Panel.NONE else requested
-        state.panel = panel
-
-        val teclas = keyboardView ?: return
-        val contenedor = panelContainer ?: return
-        val emoji = emojiPanel ?: return
-        val clip = clipboardPanel ?: return
-
-        if (panel == Panel.NONE) {
-            contenedor.visibility = View.GONE
-            teclas.visibility = View.VISIBLE
-            return
-        }
-
-        if (teclas.height > 0) lastKeyboardHeight = teclas.height
-        if (lastKeyboardHeight <= 0) lastKeyboardHeight = (4 * 54 * resources.displayMetrics.density).toInt()
-        val lp = contenedor.layoutParams
-        lp.height = lastKeyboardHeight
-        contenedor.layoutParams = lp
-
-        teclas.visibility = View.GONE
-        contenedor.visibility = View.VISIBLE
-        if (panel == Panel.EMOJI) {
-            clip.visibility = View.GONE
-            emoji.visibility = View.VISIBLE
-            emoji.setRecents(prefs.recentEmojis)
-            emoji.open()
+    /**
+     * Anota [palabra] (y, si está activado, el par «previa -> palabra»).
+     *  - Fuera del diccionario: se aprende; si se parece a una del diccionario (posible errata) hace falta repetirla 3 veces.
+     *  - En el diccionario: solo cuenta si la persona activó «recordar palabras frecuentes».
+     */
+    private fun registrar(palabra: String, previa: String?) {
+        if (!canLearn()) return
+        val w = palabra.lowercase()
+        if (w.length < 3) return
+        val enDiccionario = dictionary.contiene(w)
+        if (enDiccionario) {
+            if (prefs.learnCommon) wordStore.learn(w)
+            if (prefs.nextWord && previa != null && dictionary.contiene(previa)) bigramStore.registrar(previa, w)
         } else {
-            emoji.visibility = View.GONE
-            clip.visibility = View.VISIBLE
-            clipWatcher.capture(true)
-            clip.setItems(clipStore.all())
+            if (predictor.pareceErrata(w)) {
+                val n = (dudosas[w] ?: 0) + 1
+                dudosas[w] = n
+                if (n >= 3) {
+                    dudosas.remove(w)
+                    wordStore.learn(w)
+                }
+            } else {
+                wordStore.learn(w)
+            }
         }
-    }
-
-    private fun insertEmoji(emoji: String) {
-        currentInputConnection?.commitText(emoji, 1)
-        // Los recientes no se actualizan en contraseñas.
-        if (!state.isPassword) {
-            prefs.addRecentEmoji(emoji)
-            emojiPanel?.setRecents(prefs.recentEmojis)
-        }
-    }
-
-    private fun refreshClipboardPanel() {
-        if (state.panel == Panel.CLIPBOARD) clipboardPanel?.setItems(clipStore.all())
     }
 
     // ------------------------------------------------------------------ La Bóveda
@@ -432,7 +434,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         val barra = suggestionsContainer ?: return
         val padre = barra.parent as? android.view.ViewGroup ?: return
         val v = avisoView ?: android.widget.TextView(this).also { t ->
-            t.setTextColor(Color.WHITE)
+            t.setTextColor(if (prefs.barText != 0) prefs.barText else Color.WHITE)
             t.textSize = 13f
             t.maxLines = 2
             t.gravity = android.view.Gravity.CENTER_VERTICAL
@@ -450,9 +452,36 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
     // ------------------------------------------------------------------ interfaz
 
+    /** Aplica las medidas editables (alturas, anchos, sensibilidad) y el modo de una mano. */
+    private fun applyMetrics() {
+        val kv = keyboardView ?: return
+        val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val m = prefs.metrics(horizontal)
+        kv.metrics = m
+        val lp = kv.layoutParams as? android.widget.LinearLayout.LayoutParams ?: return
+        if (m.oneHand != 0 && !horizontal) {
+            lp.width = (resources.displayMetrics.widthPixels * 0.8f).toInt()
+            lp.gravity = if (m.oneHand == 1) android.view.Gravity.START else android.view.Gravity.END
+        } else {
+            lp.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            lp.gravity = android.view.Gravity.NO_GRAVITY
+        }
+        kv.layoutParams = lp
+        lastKeyboardHeight = 0
+    }
+
     private fun applyTheme() {
         val theme = KeyboardTheme.from(prefs)
         rootView?.setBackgroundColor(theme.background)
+        // Colores propios de la barra de sugerencias y del buscador.
+        val textoBarra = if (prefs.barText != 0) prefs.barText else theme.text
+        val fondoBarra = if (prefs.barBg != 0) prefs.barBg else Color.TRANSPARENT
+        rootView?.findViewById<View>(R.id.suggestion_bar)?.setBackgroundColor(fondoBarra)
+        searchBar?.setBackgroundColor(if (prefs.barBg != 0) prefs.barBg else theme.background)
+        for (v in sugViews) v?.setTextColor(textoBarra)
+        numericButton?.setTextColor(textoBarra)
+        avisoView?.setTextColor(textoBarra)
+        searchQueryView?.setTextColor(textoBarra)
         keyboardView?.keyboardTheme = theme
         emojiPanel?.applyTheme(theme)
         clipboardPanel?.applyTheme(theme)
@@ -512,7 +541,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         barra.addView(cerrar, android.widget.LinearLayout.LayoutParams(dp(48), android.widget.LinearLayout.LayoutParams.MATCH_PARENT))
 
         val consulta = android.widget.TextView(this)
-        consulta.setTextColor(Color.WHITE)
+        consulta.setTextColor(if (prefs.barText != 0) prefs.barText else Color.WHITE)
         consulta.textSize = 15f
         consulta.gravity = android.view.Gravity.CENTER_VERTICAL
         consulta.setSingleLine(true)
