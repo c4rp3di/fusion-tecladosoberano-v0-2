@@ -61,6 +61,7 @@ class ShortcutsActivity : Activity() {
                 val t = contenido.text.toString()
                 if (d.isNotEmpty() && t.isNotEmpty()) {
                     store.poner(d, t)
+                    Prefs(this@ShortcutsActivity).bumpDictionary()
                     pintar()
                 }
             }
@@ -76,6 +77,7 @@ class ShortcutsActivity : Activity() {
                 text = "✕"
                 setOnClickListener {
                     store.quitar(d)
+                    Prefs(this@ShortcutsActivity).bumpDictionary()
                     pintar()
                 }
             })
