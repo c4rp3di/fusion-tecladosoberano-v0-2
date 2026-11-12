@@ -47,3 +47,4 @@
 - [x] Colores del texto y del fondo de la barra de sugerencias.
 - [x] Diccionario indexado (búsqueda binaria) e importable desde la app (.txt, hasta 150.000 palabras).
 - [x] Marco: espacio vacío alrededor del teclado (general y por lado), en el editor.
+- [x] Pulsación larga en una sugerencia la quita para siempre (se restaura desde ajustes). Los cambios de la app (atajos, borrar lo aprendido) llegan al teclado al instante.
