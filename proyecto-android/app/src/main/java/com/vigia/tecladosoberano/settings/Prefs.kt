@@ -16,9 +16,14 @@ class KbMetrics(
     var text: Float = 1f,
     var magnet: Float = 0.6f,
     var onRelease: Boolean = false,
-    var oneHand: Int = 0 // 0 normal, 1 izquierda, 2 derecha
+    var oneHand: Int = 0, // 0 normal, 1 izquierda, 2 derecha
+    /** Marco: espacio vacío alrededor del teclado, en dp (izquierda, arriba, derecha, abajo). */
+    var padL: Float = 0f,
+    var padT: Float = 0f,
+    var padR: Float = 0f,
+    var padB: Float = 0f
 ) {
-    fun copy(): KbMetrics = KbMetrics(height, rows.copyOf(), space, func, gapDp, text, magnet, onRelease, oneHand)
+    fun copy(): KbMetrics = KbMetrics(height, rows.copyOf(), space, func, gapDp, text, magnet, onRelease, oneHand, padL, padT, padR, padB)
 }
 
 class Prefs(context: Context) {
@@ -47,6 +52,10 @@ class Prefs(context: Context) {
         m.magnet = sp.getFloat(mk(landscape, "magnet"), 0.6f)
         m.onRelease = sp.getBoolean(mk(landscape, "release"), false)
         m.oneHand = sp.getInt(mk(landscape, "onehand"), 0)
+        m.padL = sp.getFloat(mk(landscape, "padl"), 0f)
+        m.padT = sp.getFloat(mk(landscape, "padt"), 0f)
+        m.padR = sp.getFloat(mk(landscape, "padr"), 0f)
+        m.padB = sp.getFloat(mk(landscape, "padb"), 0f)
         return m
     }
 
@@ -61,6 +70,10 @@ class Prefs(context: Context) {
         e.putFloat(mk(landscape, "magnet"), m.magnet)
         e.putBoolean(mk(landscape, "release"), m.onRelease)
         e.putInt(mk(landscape, "onehand"), m.oneHand)
+        e.putFloat(mk(landscape, "padl"), m.padL)
+        e.putFloat(mk(landscape, "padt"), m.padT)
+        e.putFloat(mk(landscape, "padr"), m.padR)
+        e.putFloat(mk(landscape, "padb"), m.padB)
         e.apply()
     }
 
