@@ -93,8 +93,28 @@ class Prefs(context: Context) {
         get() = sp.getFloat("bar_height", 44f)
         set(value) = sp.edit().putFloat("bar_height", value).apply()
 
-    fun barItem(nombre: String, porDefecto: Boolean): Boolean = sp.getBoolean("bar_$nombre", porDefecto)
-    fun setBarItem(nombre: String, valor: Boolean) = sp.edit().putBoolean("bar_$nombre", valor).apply()
+    /** Dónde va cada icono de la barra: "left", "right" u "off". */
+    fun barPos(nombre: String, defecto: String): String = sp.getString("barpos_$nombre", defecto) ?: defecto
+    fun setBarPos(nombre: String, valor: String) = sp.edit().putString("barpos_$nombre", valor).apply()
+
+    /** Barra de dos líneas: iconos arriba y sugerencias debajo, a todo el ancho. */
+    var barTwoLines: Boolean
+        get() = sp.getBoolean("bar_two", false)
+        set(value) = sp.edit().putBoolean("bar_two", value).apply()
+
+    /** Tamaño de los iconos (sp) y separación entre ellos (dp). */
+    var barIconSize: Float
+        get() = sp.getFloat("bar_icon", 20f)
+        set(value) = sp.edit().putFloat("bar_icon", value).apply()
+
+    var barIconGap: Float
+        get() = sp.getFloat("bar_gap", 0f)
+        set(value) = sp.edit().putFloat("bar_gap", value).apply()
+
+    /** Corregir solas las erratas al cerrar una palabra. Apagado por defecto. */
+    var autoCorrect: Boolean
+        get() = sp.getBoolean("auto_correct", false)
+        set(value) = sp.edit().putBoolean("auto_correct", value).apply()
 
     /** Sube cada vez que se importa o restaura el diccionario: el teclado lo recarga. */
     fun bumpDictionary() = sp.edit().putLong("dict_version", System.currentTimeMillis()).apply()
