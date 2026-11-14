@@ -61,6 +61,11 @@
             android:label="Editor del teclado" />
 
         <activity
+            android:name=".settings.LearnedWordsActivity"
+            android:exported="false"
+            android:label="Palabras aprendidas" />
+
+        <activity
             android:name=".settings.ShortcutsActivity"
             android:exported="false"
             android:label="Atajos" />
