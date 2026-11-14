@@ -52,6 +52,13 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     private var clipboardButton: View? = null
     private var vaultButton: View? = null
     private var numericButton: android.widget.TextView? = null
+    private var atajosButton: View? = null
+    private var fechaButton: View? = null
+    private var cursorIzqButton: View? = null
+    private var cursorDchaButton: View? = null
+    private var manoButton: View? = null
+    private var atajosBar: android.widget.LinearLayout? = null
+    private var atajosChips: android.widget.LinearLayout? = null
     private val sugViews = arrayOfNulls<android.widget.TextView>(3)
     private var panelContainer: FrameLayout? = null
     private var emojiPanel: EmojiPanel? = null
@@ -79,6 +86,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             rootView?.post {
                 applyTheme()
                 applyMetrics()
+                applyBar()
                 applyPredictorOptions()
                 refreshKeyboard()
             }
@@ -166,6 +174,8 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             }
         }
 
+        crearIconosExtra(root)
+
         val ids = intArrayOf(R.id.suggestion_1, R.id.suggestion_2, R.id.suggestion_3)
         for (i in 0..2) {
             sugViews[i] = root.findViewById<android.widget.TextView>(ids[i]).also { v ->
@@ -180,6 +190,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
         buildPanels(root.findViewById(R.id.panel_container))
         buildSearchBar(root)
+        buildAtajosBar(root)
 
         applyTheme()
         applyMetrics()
@@ -198,6 +209,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         lastKeyboardHeight = 0
         applyMetrics()
         if (searching) stopSearch(false)
+        cerrarAtajos()
         if (state.panel != Panel.NONE) showPanel(Panel.NONE)
     }
 
@@ -231,6 +243,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
     override fun onFinishInput() {
         if (searching) stopSearch(false)
+        cerrarAtajos()
         currentPrefix = ""
         sugList = emptyList()
         actions.editorInfo = null
@@ -573,6 +586,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     /** Aplica las medidas editables (alturas, anchos, sensibilidad) y el modo de una mano. */
     private fun applyMetrics() {
         val kv = keyboardView ?: return
+        applyBar()
         val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val m = prefs.metrics(horizontal)
         kv.metrics = m
@@ -601,6 +615,9 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         searchBar?.setBackgroundColor(if (prefs.barBg != 0) prefs.barBg else theme.background)
         for (v in sugViews) v?.setTextColor(textoBarra)
         numericButton?.setTextColor(textoBarra)
+        for (v in listOf(atajosButton, fechaButton, cursorIzqButton, cursorDchaButton, manoButton)) {
+            (v as? android.widget.TextView)?.setTextColor(textoBarra)
+        }
         avisoView?.setTextColor(textoBarra)
         searchQueryView?.setTextColor(textoBarra)
         keyboardView?.keyboardTheme = theme
@@ -616,8 +633,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         suggestionsContainer?.visibility =
             if (field.suggestionsAllowed) View.VISIBLE else View.INVISIBLE
         refreshSuggestions()
-        clipboardButton?.visibility = if (field.isPassword) View.INVISIBLE else View.VISIBLE
-        vaultButton?.visibility = View.VISIBLE
+        applyBar()
         if (field.isPassword && state.panel == Panel.CLIPBOARD) showPanel(Panel.NONE)
 
         // En contraseña se impiden capturas de pantalla de la ventana del teclado.
@@ -639,6 +655,159 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             if (state.mode == KeyboardMode.NUMERIC) ColorUtils.setAlphaComponent(KeyboardTheme.from(prefs).accent, 90)
             else Color.TRANSPARENT
         )
+    }
+
+    // ------------------------------------------------------------------ barra superior personalizable
+
+    private fun icono(texto: String, descripcion: String, tam: Float = 20f, ancho: Int = 44): android.widget.TextView =
+        android.widget.TextView(this).also { t ->
+            t.text = texto
+            t.textSize = tam
+            t.gravity = android.view.Gravity.CENTER
+            t.contentDescription = descripcion
+            t.setTextColor(Color.WHITE)
+            t.layoutParams = android.widget.LinearLayout.LayoutParams(dp(ancho), android.widget.LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+
+    /** Iconos opcionales de la barra (todos desactivados por defecto; se activan en el editor del teclado). */
+    private fun crearIconosExtra(root: View) {
+        val barra = root.findViewById<android.widget.LinearLayout>(R.id.suggestion_bar)
+        val antesDe = barra.indexOfChild(root.findViewById(R.id.btn_numeric))
+        var pos = antesDe
+
+        atajosButton = icono("⚡", "Atajos").also {
+            it.setOnClickListener { abrirAtajos() }
+            barra.addView(it, pos++)
+        }
+        fechaButton = icono("📅", "Fecha").also {
+            // Un toque: fecha de hoy. Pulsación larga: fecha y hora.
+            it.setOnClickListener { insertarFecha(false) }
+            it.setOnLongClickListener { insertarFecha(true); true }
+            barra.addView(it, pos++)
+        }
+        cursorIzqButton = icono("◀", "Cursor a la izquierda", 16f, 36).also {
+            it.setOnClickListener { sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_LEFT) }
+            barra.addView(it, pos++)
+        }
+        cursorDchaButton = icono("▶", "Cursor a la derecha", 16f, 36).also {
+            it.setOnClickListener { sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
+            barra.addView(it, pos++)
+        }
+        manoButton = icono("⇆", "Modo una mano").also {
+            // Cambia entre teclado normal, a la izquierda y a la derecha.
+            it.setOnClickListener {
+                val m = prefs.metrics(false)
+                m.oneHand = (m.oneHand + 1) % 3
+                prefs.saveMetrics(false, m)
+            }
+            barra.addView(it, pos++)
+        }
+    }
+
+    private fun insertarFecha(conHora: Boolean) {
+        val formato = if (conHora) "dd/MM/yyyy HH:mm" else "dd/MM/yyyy"
+        val texto = java.text.SimpleDateFormat(formato, java.util.Locale("es", "ES")).format(java.util.Date())
+        currentInputConnection?.commitText(texto, 1)
+    }
+
+    /** Muestra u oculta cada icono según los ajustes y el tipo de campo, y aplica la altura de la barra. */
+    private fun applyBar() {
+        val root = rootView ?: return
+        val enContrasena = currentField.isPassword
+        val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+        val alto = dp(prefs.barHeight.toInt())
+        root.findViewById<View>(R.id.suggestion_bar)?.let { b ->
+            val lp = b.layoutParams
+            lp.height = alto
+            b.layoutParams = lp
+        }
+        for (b in listOfNotNull(searchBar, atajosBar)) {
+            val lp = b.layoutParams
+            lp.height = alto
+            b.layoutParams = lp
+        }
+
+        fun vis(activo: Boolean, oculto: Int = View.GONE) = if (activo) View.VISIBLE else oculto
+        vaultButton?.visibility = vis(prefs.barItem("vault", true))
+        numericButton?.visibility = vis(prefs.barItem("numeric", true))
+        clipboardButton?.visibility =
+            if (!prefs.barItem("clip", true)) View.GONE else if (enContrasena) View.INVISIBLE else View.VISIBLE
+        atajosButton?.visibility = vis(prefs.barItem("shortcuts", false) && !enContrasena)
+        fechaButton?.visibility = vis(prefs.barItem("date", false))
+        val cursor = vis(prefs.barItem("cursor", false))
+        cursorIzqButton?.visibility = cursor
+        cursorDchaButton?.visibility = cursor
+        manoButton?.visibility = vis(prefs.barItem("onehand", false) && !horizontal)
+    }
+
+    // Selector de atajos: sustituye la barra un momento por la lista de disparadores.
+    private fun buildAtajosBar(root: View) {
+        val barraNormal = root.findViewById<View>(R.id.suggestion_bar)
+        val padre = barraNormal.parent as android.view.ViewGroup
+        val barra = android.widget.LinearLayout(this)
+        barra.orientation = android.widget.LinearLayout.HORIZONTAL
+        barra.gravity = android.view.Gravity.CENTER_VERTICAL
+        barra.visibility = View.GONE
+
+        val cerrar = icono("✕", "Cerrar", 18f, 48)
+        cerrar.setOnClickListener { cerrarAtajos() }
+        barra.addView(cerrar)
+
+        val scroll = android.widget.HorizontalScrollView(this)
+        scroll.isHorizontalScrollBarEnabled = false
+        val chips = android.widget.LinearLayout(this)
+        chips.orientation = android.widget.LinearLayout.HORIZONTAL
+        chips.gravity = android.view.Gravity.CENTER_VERTICAL
+        scroll.addView(chips)
+        barra.addView(scroll, android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+
+        padre.addView(barra, padre.indexOfChild(barraNormal) + 1, android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(prefs.barHeight.toInt())))
+        atajosBar = barra
+        atajosChips = chips
+    }
+
+    private fun abrirAtajos() {
+        if (state.isPassword || searching) return
+        val chips = atajosChips ?: return
+        chips.removeAllViews()
+        val lista = shortcutStore.todos()
+        if (lista.isEmpty()) {
+            val t = android.widget.TextView(this)
+            t.text = "Aún no hay atajos: créalos en la app del teclado"
+            t.setTextColor(0xFF8B93A0.toInt())
+            t.gravity = android.view.Gravity.CENTER_VERTICAL
+            chips.addView(t)
+        }
+        val tema = KeyboardTheme.from(prefs)
+        for ((disparador, texto) in lista) {
+            val c = android.widget.TextView(this)
+            c.text = disparador
+            c.textSize = 15f
+            c.setTextColor(Color.WHITE)
+            c.gravity = android.view.Gravity.CENTER
+            c.setPadding(dp(14), 0, dp(14), 0)
+            val fondo = android.graphics.drawable.GradientDrawable()
+            fondo.cornerRadius = dp(14).toFloat()
+            fondo.setColor(tema.keyFunction)
+            c.background = fondo
+            c.setOnClickListener {
+                currentInputConnection?.commitText(texto, 1)
+                cerrarAtajos()
+            }
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, dp(prefs.barHeight.toInt() - 12))
+            lp.setMargins(dp(4), 0, dp(4), 0)
+            chips.addView(c, lp)
+        }
+        rootView?.findViewById<View>(R.id.suggestion_bar)?.visibility = View.GONE
+        atajosBar?.visibility = View.VISIBLE
+    }
+
+    private fun cerrarAtajos() {
+        atajosBar?.visibility = View.GONE
+        if (!searching) rootView?.findViewById<View>(R.id.suggestion_bar)?.visibility = View.VISIBLE
     }
 
     // ------------------------------------------------------------------ buscador de emojis
@@ -680,7 +849,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         searchResults = resultados
 
         padre.addView(barra, padre.indexOfChild(barraNormal) + 1, android.widget.LinearLayout.LayoutParams(
-            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(44)))
+            android.widget.LinearLayout.LayoutParams.MATCH_PARENT, dp(prefs.barHeight.toInt())))
         searchBar = barra
     }
 
