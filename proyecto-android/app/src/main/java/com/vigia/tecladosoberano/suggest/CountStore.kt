@@ -31,6 +31,9 @@ open class CountStore(context: Context, nombre: String, alias: String, private v
 
     fun size(): Int = counts.size
 
+    /** Todas las entradas, de más a menos usadas (para mostrarlas en la app). */
+    fun todas(): List<Pair<String, Int>> = counts.entries.sortedByDescending { it.value }.map { it.key to it.value }
+
     fun get(clave: String): Int = counts[clave] ?: 0
 
     fun add(clave: String) {
