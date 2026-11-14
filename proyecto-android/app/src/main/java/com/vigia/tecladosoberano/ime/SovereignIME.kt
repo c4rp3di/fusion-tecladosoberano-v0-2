@@ -58,6 +58,10 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     private var cursorDchaButton: View? = null
     private var manoButton: View? = null
     private var atajosBar: android.widget.LinearLayout? = null
+    private var grupoIzq: android.widget.LinearLayout? = null
+    private var grupoDcha: android.widget.LinearLayout? = null
+    private val ordenIconos = listOf("vault", "numeric", "shortcuts", "date", "cursor", "onehand", "clip")
+    private val posDefecto = mapOf("vault" to "left", "numeric" to "right", "clip" to "right")
     private var atajosChips: android.widget.LinearLayout? = null
     private val sugViews = arrayOfNulls<android.widget.TextView>(3)
     private var panelContainer: FrameLayout? = null
@@ -79,7 +83,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
     private val prefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, clave ->
         val c = clave ?: return@OnSharedPreferenceChangeListener
-        if (c.startsWith("m") || c == "accent" || c == "background" || c.startsWith("bar_") ||
+        if (c.startsWith("m") || c == "accent" || c == "background" || c.startsWith("bar") ||
             c == "learn_words" || c == "learn_common" || c == "next_word" || c == "dict_version"
         ) {
             if (c == "dict_version") recargarDiccionario()
@@ -174,7 +178,9 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             }
         }
 
-        crearIconosExtra(root)
+        crearIconosExtra()
+        grupoIzq = android.widget.LinearLayout(this).also { it.gravity = android.view.Gravity.CENTER_VERTICAL }
+        grupoDcha = android.widget.LinearLayout(this).also { it.gravity = android.view.Gravity.CENTER_VERTICAL }
 
         val ids = intArrayOf(R.id.suggestion_1, R.id.suggestion_2, R.id.suggestion_3)
         for (i in 0..2) {
@@ -256,10 +262,20 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             onSearchKey(key)
             return
         }
-        // Al cerrar una palabra (espacio, signo o intro) se aprende si es nueva.
+        // Borrar justo después de una autocorrección la deshace (y esa palabra no se vuelve a corregir).
+        val auto = ultimaAuto
+        ultimaAuto = null
+        if (key.type == KeyType.DELETE && auto != null) {
+            deshacerAutocorreccion(auto)
+            return
+        }
+        // Al cerrar una palabra (espacio, signo o intro) se corrige (si está activado) y se aprende si es nueva.
         val cierra = key.type == KeyType.SPACE || key.type == KeyType.ENTER ||
             (key.type == KeyType.CHAR && key.output.isNotEmpty() && !Character.isLetter(key.output[0]))
-        if (cierra) learnWordBeforeCursor()
+        if (cierra) {
+            if (key.type != KeyType.ENTER) autocorregirAntesDeCerrar(key)
+            learnWordBeforeCursor()
+        }
         actions.onKey(key)
     }
 
@@ -334,10 +350,55 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             aviso("Los atajos se gestionan en la app del teclado")
             return
         }
-        blockStore.bloquear(s.insertar)
-        wordStore.forget(s.insertar)
-        aviso("«" + s.insertar + "» ya no se sugerirá")
+        val w = s.insertar
+        if (wordStore.uso(w) > 0) {
+            // Palabra aprendida (normalmente una errata): se borra de verdad, sin dejar rastro.
+            wordStore.forget(w)
+            bigramStore.olvidarPalabra(w)
+            aviso("«" + w + "» borrada de lo aprendido")
+        } else {
+            // Palabra del diccionario: no se puede borrar, así que deja de sugerirse.
+            blockStore.bloquear(w)
+            aviso("«" + w + "» ya no se sugerirá")
+        }
         refreshSuggestions()
+    }
+
+    // ------------------------------------------------------------------ autocorrección
+
+    /** (original, corregida, longitud del carácter que cierra la palabra) de la última autocorrección. */
+    private var ultimaAuto: Triple<String, String, Int>? = null
+    private val noCorregir = HashSet<String>()
+
+    private fun autocorregirAntesDeCerrar(cierre: Key) {
+        if (!prefs.autoCorrect || !suggestionsActive() || !currentField.learnAllowed) return
+        val ic = currentInputConnection ?: return
+        val antes = ic.getTextBeforeCursor(40, 0) ?: return
+        val palabra = trailingLetters(antes)
+        if (palabra.length < 3 || noCorregir.contains(palabra)) return
+        val corregida = predictor.autocorreccion(palabra) ?: return
+        ic.beginBatchEdit()
+        ic.deleteSurroundingText(palabra.length, 0)
+        ic.commitText(corregida, 1)
+        ic.endBatchEdit()
+        ultimaAuto = Triple(palabra, corregida, cierre.output.length.coerceAtLeast(1))
+    }
+
+    private fun deshacerAutocorreccion(a: Triple<String, String, Int>) {
+        val ic = currentInputConnection ?: return
+        val total = a.second.length + a.third
+        val antes = ic.getTextBeforeCursor(total, 0)?.toString()
+        if (antes != null && antes.length == total && antes.startsWith(a.second)) {
+            ic.beginBatchEdit()
+            ic.deleteSurroundingText(total, 0)
+            ic.commitText(a.first, 1)
+            ic.endBatchEdit()
+            noCorregir.add(a.first)
+            actions.updateAutoCaps()
+            refreshKeyboard()
+        } else {
+            actions.backspace()
+        }
     }
 
     private fun acceptSuggestion(s: Sug) {
@@ -569,10 +630,13 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             t.textSize = 13f
             t.maxLines = 2
             t.gravity = android.view.Gravity.CENTER_VERTICAL
-            t.layoutParams = barra.layoutParams
-            val idx = padre.indexOfChild(barra)
-            padre.addView(t, idx + 1)
             avisoView = t
+        }
+        // La barra se recoloca al cambiar ajustes: se vuelve a enganchar junto a las sugerencias.
+        if (v.parent !== padre) {
+            (v.parent as? android.view.ViewGroup)?.removeView(v)
+            v.layoutParams = barra.layoutParams
+            padre.addView(v, padre.indexOfChild(barra) + 1)
         }
         v.text = texto
         v.visibility = View.VISIBLE
@@ -669,29 +733,21 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             t.layoutParams = android.widget.LinearLayout.LayoutParams(dp(ancho), android.widget.LinearLayout.LayoutParams.MATCH_PARENT)
         }
 
-    /** Iconos opcionales de la barra (todos desactivados por defecto; se activan en el editor del teclado). */
-    private fun crearIconosExtra(root: View) {
-        val barra = root.findViewById<android.widget.LinearLayout>(R.id.suggestion_bar)
-        val antesDe = barra.indexOfChild(root.findViewById(R.id.btn_numeric))
-        var pos = antesDe
-
+    /** Crea los iconos opcionales de la barra (apagados por defecto). `applyBar()` decide dónde van. */
+    private fun crearIconosExtra() {
         atajosButton = icono("⚡", "Atajos").also {
             it.setOnClickListener { abrirAtajos() }
-            barra.addView(it, pos++)
         }
         fechaButton = icono("📅", "Fecha").also {
             // Un toque: fecha de hoy. Pulsación larga: fecha y hora.
             it.setOnClickListener { insertarFecha(false) }
             it.setOnLongClickListener { insertarFecha(true); true }
-            barra.addView(it, pos++)
         }
         cursorIzqButton = icono("◀", "Cursor a la izquierda", 16f, 36).also {
             it.setOnClickListener { sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_LEFT) }
-            barra.addView(it, pos++)
         }
         cursorDchaButton = icono("▶", "Cursor a la derecha", 16f, 36).also {
             it.setOnClickListener { sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
-            barra.addView(it, pos++)
         }
         manoButton = icono("⇆", "Modo una mano").also {
             // Cambia entre teclado normal, a la izquierda y a la derecha.
@@ -700,7 +756,6 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
                 m.oneHand = (m.oneHand + 1) % 3
                 prefs.saveMetrics(false, m)
             }
-            barra.addView(it, pos++)
         }
     }
 
@@ -710,35 +765,97 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         currentInputConnection?.commitText(texto, 1)
     }
 
-    /** Muestra u oculta cada icono según los ajustes y el tipo de campo, y aplica la altura de la barra. */
+    private fun vistasDe(nombre: String): List<View?> = when (nombre) {
+        "vault" -> listOf(vaultButton)
+        "numeric" -> listOf(numericButton)
+        "clip" -> listOf(clipboardButton)
+        "shortcuts" -> listOf(atajosButton)
+        "date" -> listOf(fechaButton)
+        "cursor" -> listOf(cursorIzqButton, cursorDchaButton)
+        else -> listOf(manoButton)
+    }
+
+    /**
+     * Coloca los iconos a la izquierda o a la derecha según los ajustes, con su tamaño y separación,
+     * y monta la barra en una o dos líneas. En contraseña se ocultan el portapapeles y los atajos.
+     */
     private fun applyBar() {
         val root = rootView ?: return
+        val fila1 = root.findViewById<android.widget.LinearLayout>(R.id.bar_row1) ?: return
+        val fila2 = root.findViewById<android.widget.LinearLayout>(R.id.bar_row2) ?: return
+        val contenedor = suggestionsContainer ?: return
+        val izq = grupoIzq ?: return
+        val dcha = grupoDcha ?: return
         val enContrasena = currentField.isPassword
         val horizontal = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-
         val alto = dp(prefs.barHeight.toInt())
-        root.findViewById<View>(R.id.suggestion_bar)?.let { b ->
-            val lp = b.layoutParams
+        val dos = prefs.barTwoLines
+        val tam = prefs.barIconSize
+        val margen = dp((prefs.barIconGap / 2f).toInt())
+
+        izq.removeAllViews()
+        dcha.removeAllViews()
+        for (nombre in ordenIconos) {
+            val pos = prefs.barPos(nombre, posDefecto[nombre] ?: "off")
+            val destino = when (pos) {
+                "left" -> izq
+                "right" -> dcha
+                else -> null
+            }
+            for (v in vistasDe(nombre)) {
+                v ?: continue
+                (v.parent as? android.view.ViewGroup)?.removeView(v)
+                val disponible = when (nombre) {
+                    "shortcuts" -> !enContrasena
+                    "onehand" -> !horizontal
+                    else -> true
+                }
+                if (destino == null || !disponible) continue
+                (v as? android.widget.TextView)?.textSize = when {
+                    v === numericButton -> tam * 0.75f
+                    v === cursorIzqButton || v === cursorDchaButton -> tam * 0.8f
+                    else -> tam
+                }
+                val ancho = if (v === cursorIzqButton || v === cursorDchaButton) (tam * 1.8f) else (tam * 2.2f)
+                val lp = android.widget.LinearLayout.LayoutParams(dp(ancho.toInt()), android.widget.LinearLayout.LayoutParams.MATCH_PARENT)
+                lp.setMargins(margen, 0, margen, 0)
+                v.layoutParams = lp
+                v.visibility = if (nombre == "clip" && enContrasena) View.INVISIBLE else View.VISIBLE
+                destino.addView(v)
+            }
+        }
+
+        // Montaje de las filas
+        (contenedor.parent as? android.view.ViewGroup)?.removeView(contenedor)
+        (izq.parent as? android.view.ViewGroup)?.removeView(izq)
+        (dcha.parent as? android.view.ViewGroup)?.removeView(dcha)
+        fila1.removeAllViews()
+        fila2.removeAllViews()
+        val wrap = android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        val match = android.widget.LinearLayout.LayoutParams.MATCH_PARENT
+        fila1.addView(izq, android.widget.LinearLayout.LayoutParams(wrap, match))
+        if (dos) {
+            fila1.addView(View(this), android.widget.LinearLayout.LayoutParams(0, match, 1f))
+            fila2.addView(contenedor, android.widget.LinearLayout.LayoutParams(match, match))
+            fila2.visibility = View.VISIBLE
+        } else {
+            fila1.addView(contenedor, android.widget.LinearLayout.LayoutParams(0, match, 1f))
+            fila2.visibility = View.GONE
+        }
+        fila1.addView(dcha, android.widget.LinearLayout.LayoutParams(wrap, match))
+        // Con dos líneas y sin iconos, la fila de iconos sobra.
+        fila1.visibility = if (dos && izq.childCount == 0 && dcha.childCount == 0) View.GONE else View.VISIBLE
+
+        for (f in listOf(fila1, fila2)) {
+            val lp = f.layoutParams
             lp.height = alto
-            b.layoutParams = lp
+            f.layoutParams = lp
         }
         for (b in listOfNotNull(searchBar, atajosBar)) {
             val lp = b.layoutParams
             lp.height = alto
             b.layoutParams = lp
         }
-
-        fun vis(activo: Boolean, oculto: Int = View.GONE) = if (activo) View.VISIBLE else oculto
-        vaultButton?.visibility = vis(prefs.barItem("vault", true))
-        numericButton?.visibility = vis(prefs.barItem("numeric", true))
-        clipboardButton?.visibility =
-            if (!prefs.barItem("clip", true)) View.GONE else if (enContrasena) View.INVISIBLE else View.VISIBLE
-        atajosButton?.visibility = vis(prefs.barItem("shortcuts", false) && !enContrasena)
-        fechaButton?.visibility = vis(prefs.barItem("date", false))
-        val cursor = vis(prefs.barItem("cursor", false))
-        cursorIzqButton?.visibility = cursor
-        cursorDchaButton?.visibility = cursor
-        manoButton?.visibility = vis(prefs.barItem("onehand", false) && !horizontal)
     }
 
     // Selector de atajos: sustituye la barra un momento por la lista de disparadores.
