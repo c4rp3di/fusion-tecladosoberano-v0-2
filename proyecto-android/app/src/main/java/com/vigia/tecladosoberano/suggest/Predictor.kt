@@ -88,6 +88,20 @@ class Predictor(
         return pesos
     }
 
+    /**
+     * Corrección automática: solo si la palabra está toda en minúsculas, no existe en el diccionario ni entre
+     * las aprendidas, y hay una palabra a una sola letra de distancia (la más frecuente). Si no, null.
+     */
+    fun autocorreccion(palabra: String): String? {
+        if (palabra.length < 3 || palabra != palabra.lowercase()) return null
+        if (dictionary.contiene(palabra) || store.uso(palabra) > 0) return null
+        val n = Dictionary.normalizar(palabra)
+        for (c in corregirDist(n, 1, 3)) {
+            if (!bloqueadas.bloqueada(c)) return c
+        }
+        return null
+    }
+
     /** ¿Se parece tanto a una palabra del diccionario (1 letra de diferencia) que probablemente es una errata? */
     fun pareceErrata(palabra: String): Boolean {
         val n = Dictionary.normalizar(palabra)
