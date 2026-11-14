@@ -31,8 +31,8 @@ android {
         applicationId "com.vigia.tecladosoberano"
         minSdk 26
         targetSdk 34
-        versionCode 9
-        versionName "v13.0"
+        versionCode 10
+        versionName "v14.0"
     }
 
     compileOptions {
