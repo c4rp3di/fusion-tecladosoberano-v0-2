@@ -50,3 +50,6 @@
 - [x] Pulsación larga en una sugerencia la quita para siempre (se restaura desde ajustes). Los cambios de la app (atajos, borrar lo aprendido) llegan al teclado al instante.
 - [x] Pantalla «Palabras aprendidas»: ver, marcar y borrar solo lo que se quiera (palabras, pares y sugerencias quitadas).
 - [x] Barra superior editable: altura e iconos (🔑, 123, 📋) y opcionales apagados por defecto: ⚡ atajos, 📅 fecha, ◀ ▶ cursor, ⇆ una mano.
+
+## v0.8 hecho
+Barra 1/2 líneas, tamaño/separación/posición de iconos, autocorrección opcional, borrado directo de aprendidas, listas plegadas con índice de letras.
