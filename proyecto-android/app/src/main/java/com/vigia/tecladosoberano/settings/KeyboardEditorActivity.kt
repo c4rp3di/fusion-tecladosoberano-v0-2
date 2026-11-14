@@ -88,6 +88,17 @@ class KeyboardEditorActivity : Activity() {
         panel.addView(slider("Ancho de la barra espaciadora", 0.6f, 2.2f, m.space, { "%.0f %%".format(Locale.US, it * 100) }) { m.space = it })
         panel.addView(slider("Ancho de Shift, borrar e Intro", 0.7f, 1.8f, m.func, { "%.0f %%".format(Locale.US, it * 100) }) { m.func = it })
 
+        panel.addView(titulo("Barra superior (sugerencias e iconos)"))
+        panel.addView(texto("Se aplica al teclado real al instante. Con muchos iconos activos quedará menos sitio para las sugerencias.", 12f, false, dim = true))
+        panel.addView(slider("Altura de la barra", 32f, 72f, prefs.barHeight, { "%.0f dp".format(Locale.US, it) }) { prefs.barHeight = it })
+        panel.addView(interruptor("🔑  La Bóveda", "vault", true))
+        panel.addView(interruptor("123  Teclado numérico", "numeric", true))
+        panel.addView(interruptor("📋  Portapapeles", "clip", true))
+        panel.addView(interruptor("⚡  Elegir un atajo", "shortcuts", false))
+        panel.addView(interruptor("📅  Insertar fecha (pulsación larga: con hora)", "date", false))
+        panel.addView(interruptor("◀ ▶  Mover el cursor", "cursor", false))
+        panel.addView(interruptor("⇆  Cambiar a modo una mano (solo vertical)", "onehand", false))
+
         panel.addView(titulo("Marco (espacio alrededor del teclado)"))
         panel.addView(texto("Como cambiar el tamaño de una imagen: deja un borde vacío alrededor. El general mueve los cuatro a la vez; abajo puedes afinar cada lado.", 12f, false, dim = true))
         panel.addView(slider("Marco general", 0f, 48f, maxOf(m.padL, m.padT, m.padR, m.padB), { "%.0f dp".format(Locale.US, it) }) {
@@ -138,6 +149,15 @@ class KeyboardEditorActivity : Activity() {
             setHintTextColor(0xFF8B93A0.toInt())
         })
     }
+
+    private fun interruptor(texto: String, nombre: String, porDefecto: Boolean): Switch =
+        Switch(this).apply {
+            text = texto
+            setTextColor(0xFFE6E8EB.toInt())
+            isChecked = prefs.barItem(nombre, porDefecto)
+            setOnCheckedChangeListener { _, on -> prefs.setBarItem(nombre, on) }
+            layoutParams = margen(8)
+        }
 
     private fun cambiarPerfil(horizontal: Boolean) {
         if (horizontal == landscape) return
