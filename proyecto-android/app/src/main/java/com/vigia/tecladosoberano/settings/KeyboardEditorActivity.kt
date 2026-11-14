@@ -89,15 +89,26 @@ class KeyboardEditorActivity : Activity() {
         panel.addView(slider("Ancho de Shift, borrar e Intro", 0.7f, 1.8f, m.func, { "%.0f %%".format(Locale.US, it * 100) }) { m.func = it })
 
         panel.addView(titulo("Barra superior (sugerencias e iconos)"))
-        panel.addView(texto("Se aplica al teclado real al instante. Con muchos iconos activos quedará menos sitio para las sugerencias.", 12f, false, dim = true))
-        panel.addView(slider("Altura de la barra", 32f, 72f, prefs.barHeight, { "%.0f dp".format(Locale.US, it) }) { prefs.barHeight = it })
-        panel.addView(interruptor("🔑  La Bóveda", "vault", true))
-        panel.addView(interruptor("123  Teclado numérico", "numeric", true))
-        panel.addView(interruptor("📋  Portapapeles", "clip", true))
-        panel.addView(interruptor("⚡  Elegir un atajo", "shortcuts", false))
-        panel.addView(interruptor("📅  Insertar fecha (pulsación larga: con hora)", "date", false))
-        panel.addView(interruptor("◀ ▶  Mover el cursor", "cursor", false))
-        panel.addView(interruptor("⇆  Cambiar a modo una mano (solo vertical)", "onehand", false))
+        panel.addView(texto("Se aplica al teclado real al instante. Con muchos iconos activos queda menos sitio para las sugerencias: usa dos líneas para tener ambas cosas.", 12f, false, dim = true))
+        val dosLineas = Switch(this).apply {
+            text = "Dos líneas: iconos arriba y sugerencias debajo, a todo el ancho"
+            setTextColor(0xFFE6E8EB.toInt())
+            isChecked = prefs.barTwoLines
+            setOnCheckedChangeListener { _, on -> prefs.barTwoLines = on }
+            layoutParams = margen(8)
+        }
+        panel.addView(dosLineas)
+        panel.addView(slider("Altura de cada línea", 32f, 72f, prefs.barHeight, { "%.0f dp".format(Locale.US, it) }) { prefs.barHeight = it })
+        panel.addView(slider("Tamaño de los iconos", 12f, 32f, prefs.barIconSize, { "%.0f".format(Locale.US, it) }) { prefs.barIconSize = it })
+        panel.addView(slider("Separación entre iconos", 0f, 24f, prefs.barIconGap, { "%.0f dp".format(Locale.US, it) }) { prefs.barIconGap = it })
+        panel.addView(texto("Dónde va cada icono (los opcionales vienen apagados):", 13f, false, dim = true).also { it.layoutParams = margen(14) })
+        panel.addView(posicion("🔑  La Bóveda", "vault", "left"))
+        panel.addView(posicion("123  Teclado numérico", "numeric", "right"))
+        panel.addView(posicion("📋  Portapapeles", "clip", "right"))
+        panel.addView(posicion("⚡  Elegir un atajo", "shortcuts", "off"))
+        panel.addView(posicion("📅  Fecha (pulsación larga: con hora)", "date", "off"))
+        panel.addView(posicion("◀ ▶  Mover el cursor", "cursor", "off"))
+        panel.addView(posicion("⇆  Modo una mano (solo vertical)", "onehand", "off"))
 
         panel.addView(titulo("Marco (espacio alrededor del teclado)"))
         panel.addView(texto("Como cambiar el tamaño de una imagen: deja un borde vacío alrededor. El general mueve los cuatro a la vez; abajo puedes afinar cada lado.", 12f, false, dim = true))
@@ -150,14 +161,27 @@ class KeyboardEditorActivity : Activity() {
         })
     }
 
-    private fun interruptor(texto: String, nombre: String, porDefecto: Boolean): Switch =
-        Switch(this).apply {
-            text = texto
-            setTextColor(0xFFE6E8EB.toInt())
-            isChecked = prefs.barItem(nombre, porDefecto)
-            setOnCheckedChangeListener { _, on -> prefs.setBarItem(nombre, on) }
-            layoutParams = margen(8)
+    /** Elección «No / Izquierda / Derecha» para un icono de la barra. */
+    private fun posicion(texto: String, nombre: String, defecto: String): LinearLayout {
+        val caja = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        caja.layoutParams = margen(10)
+        caja.addView(texto(texto, 14f, false))
+        val grupo = android.widget.RadioGroup(this).apply { orientation = android.widget.RadioGroup.HORIZONTAL }
+        val opciones = listOf("off" to "No", "left" to "Izquierda", "right" to "Derecha")
+        val actual = prefs.barPos(nombre, defecto)
+        for ((valor, nombreOpcion) in opciones) {
+            val r = android.widget.RadioButton(this).apply {
+                text = nombreOpcion
+                id = android.view.View.generateViewId()
+                setTextColor(0xFFE6E8EB.toInt())
+                isChecked = valor == actual
+            }
+            grupo.addView(r)
+            r.setOnClickListener { prefs.setBarPos(nombre, valor) }
         }
+        caja.addView(grupo)
+        return caja
+    }
 
     private fun cambiarPerfil(horizontal: Boolean) {
         if (horizontal == landscape) return
