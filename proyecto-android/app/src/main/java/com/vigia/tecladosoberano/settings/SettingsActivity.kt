@@ -98,6 +98,12 @@ class SettingsActivity : Activity() {
 
         content.addView(label("Sugerencias: opciones de privacidad (todo local y cifrado)", 16f, bold = true).withTopMargin(28))
         content.addView(android.widget.Switch(this).apply {
+            text = "Autocorrección: corregir sola la errata al cerrar la palabra (si no te gusta, pulsa borrar justo después)"
+            setTextColor(Color.WHITE)
+            isChecked = prefs.autoCorrect
+            setOnCheckedChangeListener { _, on -> prefs.autoCorrect = on }
+        }.withTopMargin(8))
+        content.addView(android.widget.Switch(this).apply {
             text = "Recordar mis palabras frecuentes (también las del diccionario)"
             setTextColor(Color.WHITE)
             isChecked = prefs.learnCommon
