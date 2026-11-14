@@ -127,3 +127,7 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 - `ui/KeyboardView`: alturas por fila, pesos de teclas especiales, separación, «imán» (la letra más probable según el prefijo favorece la tecla vecina) y decisión de tecla al tocar/soltar.
 - `suggest/`: `Dictionary` indexado por forma sin tildes; `Predictor` (atajos, prefijos, correcciones por distancia de edición, siguiente palabra); `CountStore` + `SecureFile` (cifrado Keystore) para `WordStore` y `BigramStore`; `ShortcutStore` para atajos.
 - Privacidad: nada de esto sale del móvil; sin aprendizaje ni atajos en contraseñas, correo o URL; las opciones que guardan más información (palabras frecuentes, pares) están apagadas por defecto.
+
+## v0.7: revisión de lo aprendido y barra superior editable
+- `settings/LearnedWordsActivity`: lista con casillas de `WordStore`, `BigramStore` y `BlockStore`; borra solo lo marcado. Al cambiar, `Prefs.bumpDictionary()` hace que el teclado relea sus almacenes.
+- Barra superior: `applyBar()` en `SovereignIME` muestra u oculta cada icono según `Prefs.barItem(...)` y aplica la altura (`Prefs.barHeight`). Los iconos opcionales (⚡ selector de atajos, 📅 fecha, ◀ ▶ cursor, ⇆ una mano) están apagados por defecto; el selector de atajos no se muestra en campos de contraseña.
