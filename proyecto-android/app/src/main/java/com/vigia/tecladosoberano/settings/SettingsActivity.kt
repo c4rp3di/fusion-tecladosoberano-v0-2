@@ -83,13 +83,10 @@ class SettingsActivity : Activity() {
             prefs.bumpDictionary()
             estadoDic.text = estadoDiccionario()
         }.withTopMargin(4))
-        val bloq = com.vigia.tecladosoberano.suggest.BlockStore(this)
-        content.addView(button("Restaurar sugerencias quitadas (" + bloq.cantidad() + ")") {
-            bloq.clear()
-            prefs.bumpDictionary()
-            it.text = "Sugerencias restauradas"
+        content.addView(button("Palabras aprendidas y sugerencias quitadas") {
+            startActivity(Intent(this, LearnedWordsActivity::class.java))
         }.withTopMargin(8))
-        content.addView(label("Mantén pulsada una sugerencia en el teclado para quitarla.", 13f, dim = true).withTopMargin(4))
+        content.addView(label("Mira qué ha aprendido el teclado, borra solo lo que quieras y restaura sugerencias. Mantén pulsada una sugerencia en el teclado para quitarla.", 13f, dim = true).withTopMargin(4))
         content.addView(button("Atajos de texto") {
             startActivity(Intent(this, ShortcutsActivity::class.java))
         }.withTopMargin(8))
@@ -119,12 +116,7 @@ class SettingsActivity : Activity() {
             setTextColor(Color.WHITE)
             setOnCheckedChangeListener { _, on -> prefs.learnWords = on }
         }.withTopMargin(6))
-        content.addView(button(getString(R.string.settings_forget)) {
-            com.vigia.tecladosoberano.suggest.WordStore(this).clear()
-            com.vigia.tecladosoberano.suggest.BigramStore(this).clear()
-            prefs.bumpDictionary()
-            it.text = getString(R.string.settings_forgotten)
-        }.withTopMargin(8))
+
 
         val test = EditText(this).apply {
             hint = getString(R.string.settings_test_hint)
