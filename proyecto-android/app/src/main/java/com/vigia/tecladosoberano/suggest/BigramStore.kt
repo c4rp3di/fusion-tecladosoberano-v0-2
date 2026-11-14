@@ -15,6 +15,13 @@ class BigramStore(context: Context) : CountStore(context, "pairs.dat", "ks_pairs
         return r
     }
 
+    /** Quita todos los pares en los que aparece [palabra] (como anterior o como siguiente). */
+    fun olvidarPalabra(palabra: String) {
+        val w = palabra.lowercase()
+        val sobran = entradas().map { it.key }.filter { it.startsWith("$w|") || it.endsWith("|$w") }
+        for (k in sobran) remove(k)
+    }
+
     fun registrar(previa: String, siguiente: String) {
         add(previa.lowercase() + "|" + siguiente.lowercase())
     }
