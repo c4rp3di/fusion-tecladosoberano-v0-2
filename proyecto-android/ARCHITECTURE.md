@@ -131,3 +131,9 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 ## v0.7: revisión de lo aprendido y barra superior editable
 - `settings/LearnedWordsActivity`: lista con casillas de `WordStore`, `BigramStore` y `BlockStore`; borra solo lo marcado. Al cambiar, `Prefs.bumpDictionary()` hace que el teclado relea sus almacenes.
 - Barra superior: `applyBar()` en `SovereignIME` muestra u oculta cada icono según `Prefs.barItem(...)` y aplica la altura (`Prefs.barHeight`). Los iconos opcionales (⚡ selector de atajos, 📅 fecha, ◀ ▶ cursor, ⇆ una mano) están apagados por defecto; el selector de atajos no se muestra en campos de contraseña.
+
+## v0.8
+- Barra superior: 1 o 2 líneas (`bar_row1`/`bar_row2`), tamaño y separación de iconos, cada icono a izquierda/derecha/oculto (`applyBar()`).
+- Autocorrección opcional (apagada por defecto): al pulsar espacio corrige si hay candidato claro; Borrar justo después la deshace.
+- Pulsación larga sobre una sugerencia aprendida la borra directamente (WordStore + BigramStore); si es del diccionario se oculta (BlockStore) y se restaura desde la pantalla de palabras aprendidas.
+- Pantalla de palabras aprendidas: listas plegadas (acordeón), orden alfabético, índice lateral de letras.
