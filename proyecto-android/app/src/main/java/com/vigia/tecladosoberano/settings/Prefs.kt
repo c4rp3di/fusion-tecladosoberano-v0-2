@@ -88,6 +88,14 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_LEARN, true)
         set(value) = sp.edit().putBoolean(KEY_LEARN, value).apply()
 
+    /** Barra superior: alto en dp y qué iconos se muestran. */
+    var barHeight: Float
+        get() = sp.getFloat("bar_height", 44f)
+        set(value) = sp.edit().putFloat("bar_height", value).apply()
+
+    fun barItem(nombre: String, porDefecto: Boolean): Boolean = sp.getBoolean("bar_$nombre", porDefecto)
+    fun setBarItem(nombre: String, valor: Boolean) = sp.edit().putBoolean("bar_$nombre", valor).apply()
+
     /** Sube cada vez que se importa o restaura el diccionario: el teclado lo recarga. */
     fun bumpDictionary() = sp.edit().putLong("dict_version", System.currentTimeMillis()).apply()
 
