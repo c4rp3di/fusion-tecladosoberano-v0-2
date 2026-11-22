@@ -105,6 +105,7 @@ class KeyboardEditorActivity : Activity() {
         panel.addView(posicion("🔑  La Bóveda", "vault", "left"))
         panel.addView(posicion("123  Teclado numérico", "numeric", "right"))
         panel.addView(posicion("📋  Portapapeles", "clip", "right"))
+        panel.addView(posicion("🎤  Dictado por voz (solo si hay modelo importado)", "voice", "right"))
         panel.addView(posicion("⚡  Elegir un atajo", "shortcuts", "off"))
         panel.addView(posicion("📅  Fecha (pulsación larga: con hora)", "date", "off"))
         panel.addView(posicion("◀ ▶  Mover el cursor", "cursor", "off"))
