@@ -6,3 +6,9 @@
     public static int w(...);
     public static int e(...);
 }
+
+# Vosk + JNA (reflexión/JNI)
+-keep class com.sun.jna.** { *; }
+-keep class org.vosk.** { *; }
+-keepclassmembers class * extends com.sun.jna.** { public *; }
+-dontwarn java.awt.**
