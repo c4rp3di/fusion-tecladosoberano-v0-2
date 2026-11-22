@@ -69,6 +69,9 @@ class SettingsActivity : Activity() {
         content.addView(button("Editor del teclado (tamaño, teclas, sensibilidad)") {
             startActivity(Intent(this, KeyboardEditorActivity::class.java))
         }.withTopMargin(24))
+        content.addView(button("Voz: dictado sin conexión (modelo y micrófono)") {
+            startActivity(Intent(this, VoiceActivity::class.java))
+        }.withTopMargin(8))
         val estadoDic = label(estadoDiccionario(), 13f, dim = true)
         content.addView(button("Importar diccionario (.txt)") {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT)
