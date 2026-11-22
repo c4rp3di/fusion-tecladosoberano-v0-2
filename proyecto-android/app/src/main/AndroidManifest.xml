@@ -8,6 +8,13 @@
     -->
 
     <!--
+        Voz: único permiso "sensible" añadido, solo para el dictado sin conexión (Vosk). El audio se procesa en el móvil
+        y no puede salir de él porque la app sigue sin permiso de internet.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+
+    <!--
         Puente con La Bóveda: permiso de FIRMA (no es de red). Se declara aquí y en La Bóveda para que no
         importe cuál se instale primero; ambas apps deben estar firmadas con la misma llave de la Suite.
     -->
@@ -22,11 +29,11 @@
     </queries>
 
     <application
-        android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.TecladoSoberano"
@@ -69,6 +76,11 @@
             android:name=".settings.ShortcutsActivity"
             android:exported="false"
             android:label="Atajos" />
+
+        <activity
+            android:name=".settings.VoiceActivity"
+            android:exported="false"
+            android:label="Voz" />
 
     </application>
 
