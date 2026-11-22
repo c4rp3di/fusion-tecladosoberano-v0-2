@@ -116,6 +116,19 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("auto_correct", false)
         set(value) = sp.edit().putBoolean("auto_correct", value).apply()
 
+    /** Dictado por voz: entender «coma», «punto», «nueva línea»… como signos. Activado por defecto. */
+    var voiceCommands: Boolean
+        get() = sp.getBoolean("voz_comandos", true)
+        set(value) = sp.edit().putBoolean("voz_comandos", value).apply()
+
+    /** Avisa al teclado de que el modelo de voz se ha importado o borrado (recoloca la barra). */
+    fun avisarCambioVoz() = sp.edit().putLong("bar_voz_rev", System.currentTimeMillis()).apply()
+
+    /** Dictado por voz: mayúscula al empezar frase. Activado por defecto. */
+    var voiceCaps: Boolean
+        get() = sp.getBoolean("voz_mayusculas", true)
+        set(value) = sp.edit().putBoolean("voz_mayusculas", value).apply()
+
     /** Sube cada vez que se importa o restaura el diccionario: el teclado lo recarga. */
     fun bumpDictionary() = sp.edit().putLong("dict_version", System.currentTimeMillis()).apply()
 
