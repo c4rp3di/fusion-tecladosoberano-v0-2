@@ -57,11 +57,13 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     private var cursorIzqButton: View? = null
     private var cursorDchaButton: View? = null
     private var manoButton: View? = null
+    private var vozButton: android.widget.TextView? = null
+    private lateinit var voz: com.vigia.tecladosoberano.voice.VoiceDictation
     private var atajosBar: android.widget.LinearLayout? = null
     private var grupoIzq: android.widget.LinearLayout? = null
     private var grupoDcha: android.widget.LinearLayout? = null
-    private val ordenIconos = listOf("vault", "numeric", "shortcuts", "date", "cursor", "onehand", "clip")
-    private val posDefecto = mapOf("vault" to "left", "numeric" to "right", "clip" to "right")
+    private val ordenIconos = listOf("vault", "numeric", "voice", "shortcuts", "date", "cursor", "onehand", "clip")
+    private val posDefecto = mapOf("vault" to "left", "numeric" to "right", "clip" to "right", "voice" to "right")
     private var atajosChips: android.widget.LinearLayout? = null
     private val sugViews = arrayOfNulls<android.widget.TextView>(3)
     private var panelContainer: FrameLayout? = null
@@ -128,6 +130,9 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         predictor = Predictor(dictionary, wordStore, shortcutStore, bigramStore, blockStore)
         applyPredictorOptions()
         prefs.registerListener(prefsListener)
+        voz = com.vigia.tecladosoberano.voice.VoiceDictation(this, { currentInputConnection }, prefs) { est, msg ->
+            actualizarVoz(est, msg)
+        }
 
         vault = VaultBridge(this)
         vault.alCambiar = { updateVaultIndicator() }
@@ -143,6 +148,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         prefs.unregisterListener(prefsListener)
         clipWatcher.stop()
         vault.olvidar()
+        voz.liberar()
         super.onDestroy()
     }
 
@@ -221,6 +227,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        voz.alMostrar()
         currentField = InputFieldInfo.from(info)
         state.isPassword = currentField.isPassword
         actions.editorInfo = info
@@ -248,6 +255,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onFinishInput() {
+        voz.alOcultar()
         if (searching) stopSearch(false)
         cerrarAtajos()
         currentPrefix = ""
@@ -258,6 +266,8 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     }
 
     override fun onKey(key: Key) {
+        // Tocar una tecla corta el dictado (lo ya dictado se queda) y la tecla se escribe normal.
+        if (voz.activo) voz.cancelar()
         if (searching) {
             onSearchKey(key)
             return
@@ -291,7 +301,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
     // ------------------------------------------------------------------ sugerencias
 
     private fun suggestionsActive(): Boolean =
-        currentField.suggestionsAllowed && !state.isPassword && !searching && state.mode != KeyboardMode.NUMERIC
+        currentField.suggestionsAllowed && !state.isPassword && !searching && state.mode != KeyboardMode.NUMERIC && !voz.activo
 
     private fun trailingLetters(texto: CharSequence): String {
         var i = texto.length
@@ -749,6 +759,9 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         cursorDchaButton = icono("▶", "Cursor a la derecha", 16f, 36).also {
             it.setOnClickListener { sendDownUpKeyEvents(android.view.KeyEvent.KEYCODE_DPAD_RIGHT) }
         }
+        vozButton = icono("🎤", "Dictar por voz").also {
+            it.setOnClickListener { alternarVoz() }
+        }
         manoButton = icono("⇆", "Modo una mano").also {
             // Cambia entre teclado normal, a la izquierda y a la derecha.
             it.setOnClickListener {
@@ -757,6 +770,47 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
                 prefs.saveMetrics(false, m)
             }
         }
+    }
+
+    /** Pulsar 🎤: empieza o termina el dictado. Si falta el modelo o el permiso, abre los ajustes de Voz. */
+    private fun alternarVoz() {
+        if (voz.activo) {
+            voz.stop()
+            return
+        }
+        if (state.isPassword) return
+        val pedirPermiso = checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!com.vigia.tecladosoberano.voice.VoiceModel.instalado(this) || pedirPermiso) {
+            aviso(if (pedirPermiso) "Falta el permiso del micrófono. Abro los ajustes de Voz…" else "Falta el modelo de voz. Abro los ajustes de Voz…")
+            startActivity(
+                android.content.Intent(this, com.vigia.tecladosoberano.settings.VoiceActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(com.vigia.tecladosoberano.settings.VoiceActivity.EXTRA_PEDIR_PERMISO, pedirPermiso)
+            )
+            return
+        }
+        voz.start()
+    }
+
+    private fun actualizarVoz(est: com.vigia.tecladosoberano.voice.VoiceDictation.Estado, mensaje: String?) {
+        val b = vozButton ?: return
+        when (est) {
+            com.vigia.tecladosoberano.voice.VoiceDictation.Estado.INACTIVO -> {
+                b.text = "🎤"
+                b.setBackgroundColor(Color.TRANSPARENT)
+            }
+            com.vigia.tecladosoberano.voice.VoiceDictation.Estado.CARGANDO -> {
+                b.text = "⏳"
+                b.setBackgroundColor(Color.TRANSPARENT)
+            }
+            com.vigia.tecladosoberano.voice.VoiceDictation.Estado.ESCUCHANDO -> {
+                b.text = "🔴"
+                b.setBackgroundColor(ColorUtils.setAlphaComponent(KeyboardTheme.from(prefs).accent, 90))
+            }
+        }
+        if (mensaje != null) aviso(mensaje)
+        if (est == com.vigia.tecladosoberano.voice.VoiceDictation.Estado.INACTIVO) refreshSuggestions()
     }
 
     private fun insertarFecha(conHora: Boolean) {
@@ -771,6 +825,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
         "clip" -> listOf(clipboardButton)
         "shortcuts" -> listOf(atajosButton)
         "date" -> listOf(fechaButton)
+        "voice" -> listOf(vozButton)
         "cursor" -> listOf(cursorIzqButton, cursorDchaButton)
         else -> listOf(manoButton)
     }
@@ -808,6 +863,7 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
                 val disponible = when (nombre) {
                     "shortcuts" -> !enContrasena
                     "onehand" -> !horizontal
+                    "voice" -> !enContrasena && com.vigia.tecladosoberano.voice.VoiceModel.instalado(this)
                     else -> true
                 }
                 if (destino == null || !disponible) continue
