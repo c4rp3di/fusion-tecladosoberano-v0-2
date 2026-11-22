@@ -137,3 +137,10 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 - Autocorrección opcional (apagada por defecto): al pulsar espacio corrige si hay candidato claro; Borrar justo después la deshace.
 - Pulsación larga sobre una sugerencia aprendida la borra directamente (WordStore + BigramStore); si es del diccionario se oculta (BlockStore) y se restaura desde la pantalla de palabras aprendidas.
 - Pantalla de palabras aprendidas: listas plegadas (acordeón), orden alfabético, índice lateral de letras.
+
+## v0.9 — Voz (Vosk, sin conexión)
+- Motor: `vosk-android` 0.3.32 + JNA (solo arm64-v8a y armeabi-v7a). El modelo NO va en el APK: `voice/VoiceModel` lo importa desde un .zip (SAF), con protección contra zip-slip y límite de tamaño, a `filesDir/voz_modelo`.
+- `voice/VoiceDictation`: SpeechService; parciales con `setComposingText`, frases cerradas con `commitText`. Se corta al tocar una tecla, al cambiar de campo y se libera el modelo 90 s tras ocultar el teclado.
+- `voice/VoiceText`: comandos de voz (coma, punto, nueva línea…), espaciado y mayúscula tras punto.
+- `settings/VoiceActivity`: enlace copiable (small / grande), importar, borrar, permiso de micrófono, opciones.
+- Permiso nuevo: RECORD_AUDIO (único). Sigue sin INTERNET. Icono 🎤 solo si hay modelo; no en contraseñas; lo dictado no se aprende.
