@@ -53,3 +53,7 @@
 
 ## v0.8 hecho
 Barra 1/2 líneas, tamaño/separación/posición de iconos, autocorrección opcional, borrado directo de aprendidas, listas plegadas con índice de letras.
+
+## v0.9 hecho
+Dictado por voz con Vosk (modelo importado por el usuario), icono 🎤 posicionable, comandos de puntuación.
+Ideas: palabras clave propias en el vocabulario del reconocedor; atajo de voz «borrar eso».
