@@ -106,7 +106,7 @@ class Predictor(
     fun pareceErrata(palabra: String): Boolean {
         val n = Dictionary.normalizar(palabra)
         if (n.length < 3) return false
-        return corregirDist(n, 1, 1).isNotEmpty()
+        return Errata.sospechosa(dictionary, palabra) || corregirDist(n, 1, 1).isNotEmpty()
     }
 
     // ------------------------------------------------------------------ siguiente palabra
