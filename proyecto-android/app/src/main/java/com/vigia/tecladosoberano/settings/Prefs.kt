@@ -132,6 +132,11 @@ class Prefs(context: Context) {
     /** Sube cada vez que se importa o restaura el diccionario: el teclado lo recarga. */
     fun bumpDictionary() = sp.edit().putLong("dict_version", System.currentTimeMillis()).apply()
 
+    /** Cuántas veces hay que escribir una palabra nueva para que el teclado la aprenda (1–3). Por defecto 2. */
+    var learnAfter: Int
+        get() = sp.getInt("learn_after", 2).coerceIn(1, 3)
+        set(value) = sp.edit().putInt("learn_after", value.coerceIn(1, 3)).apply()
+
     /** Opcional: recordar también qué palabras del diccionario usas más, para sugerirlas antes. */
     var learnCommon: Boolean
         get() = sp.getBoolean("learn_common", false)
