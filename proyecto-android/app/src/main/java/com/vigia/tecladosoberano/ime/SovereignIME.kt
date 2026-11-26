@@ -481,15 +481,15 @@ class SovereignIME : InputMethodService(), KeyboardView.Listener {
             if (prefs.learnCommon) wordStore.learn(w)
             if (prefs.nextWord && previa != null && dictionary.contiene(previa)) bigramStore.registrar(previa, w)
         } else {
-            if (predictor.pareceErrata(w)) {
-                val n = (dudosas[w] ?: 0) + 1
-                dudosas[w] = n
-                if (n >= 3) {
-                    dudosas.remove(w)
-                    wordStore.learn(w)
-                }
-            } else {
+            // Palabra nueva: hacen falta varios usos (más si parece una errata de dedo) antes de aprenderla.
+            val necesarios = if (predictor.pareceErrata(w)) 5 else prefs.learnAfter
+            val n = (dudosas[w] ?: 0) + 1
+            if (n >= necesarios) {
+                dudosas.remove(w)
                 wordStore.learn(w)
+            } else {
+                if (dudosas.size > 400) dudosas.clear()
+                dudosas[w] = n
             }
         }
     }
