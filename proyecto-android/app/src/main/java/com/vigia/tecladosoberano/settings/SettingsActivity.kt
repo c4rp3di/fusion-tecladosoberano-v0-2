@@ -125,6 +125,12 @@ class SettingsActivity : Activity() {
             setTextColor(Color.WHITE)
             setOnCheckedChangeListener { _, on -> prefs.learnWords = on }
         }.withTopMargin(6))
+        // Cuántas veces hay que escribir una palabra nueva para aprenderla (las que parecen errata piden 5).
+        content.addView(button("") { b ->
+            prefs.learnAfter = prefs.learnAfter % 3 + 1
+            b.text = textoAprender()
+        }.also { it.text = textoAprender() }.withTopMargin(8))
+        content.addView(label("Las palabras que parecen una errata (tecla vecina, letras cambiadas…) piden 5 usos.", 12f, dim = true).withTopMargin(4))
 
 
         val test = EditText(this).apply {
@@ -172,6 +178,9 @@ class SettingsActivity : Activity() {
             setTextColor(if (dim) 0xFF8B93A0.toInt() else 0xFFE6E8EB.toInt())
             if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
+
+    private fun textoAprender(): String =
+        "Aprender una palabra nueva tras: ${prefs.learnAfter} " + if (prefs.learnAfter == 1) "uso" else "usos"
 
     private fun button(text: String, onClick: (Button) -> Unit) = Button(this).apply {
         this.text = text
