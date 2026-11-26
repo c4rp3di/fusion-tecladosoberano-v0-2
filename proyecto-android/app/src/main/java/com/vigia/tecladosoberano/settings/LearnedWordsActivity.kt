@@ -18,6 +18,7 @@ import com.vigia.tecladosoberano.suggest.BigramStore
 import com.vigia.tecladosoberano.suggest.BlockStore
 import com.vigia.tecladosoberano.suggest.CountStore
 import com.vigia.tecladosoberano.suggest.Dictionary
+import com.vigia.tecladosoberano.suggest.Errata
 import com.vigia.tecladosoberano.suggest.WordStore
 
 /**
@@ -33,6 +34,7 @@ class LearnedWordsActivity : Activity() {
     private lateinit var scroll: ScrollView
     private lateinit var indice: LinearLayout
     private lateinit var burbuja: TextView
+    private val diccionario by lazy { Dictionary(this) }
 
     /** Sección abierta: 0 = palabras, 1 = pares, -1 = ninguna (todas plegadas). */
     private var abierta = -1
@@ -84,7 +86,8 @@ class LearnedWordsActivity : Activity() {
         seccion(
             0, "Palabras aprendidas", palabras,
             palabras.todas().map { it.first to "${it.first}   ×${it.second}" },
-            "Todavía no ha aprendido ninguna palabra."
+            "Todavía no ha aprendido ninguna palabra.",
+            { palabra -> Errata.sospechosa(diccionario, palabra) }
         )
 
         val pares = BigramStore(this)
@@ -117,7 +120,8 @@ class LearnedWordsActivity : Activity() {
     }
 
     private fun seccion(
-        id: Int, titulo: String, almacen: CountStore, filas: List<Pair<String, String>>, vacio: String
+        id: Int, titulo: String, almacen: CountStore, filas: List<Pair<String, String>>, vacio: String,
+        sospechosa: ((String) -> Boolean)? = null
     ) {
         val abierta = this.abierta == id
         val cabecera = texto((if (abierta) "▾  " else "▸  ") + "$titulo (${filas.size})", 17f, true)
@@ -164,6 +168,20 @@ class LearnedWordsActivity : Activity() {
             }
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         panel.addView(fila, margen(4))
+        if (sospechosa != null) {
+            panel.addView(Button(this).apply {
+                text = "Marcar posibles erratas"
+                setOnClickListener {
+                    var n = 0
+                    for ((c, clave) in casillas) {
+                        val s = sospechosa(clave)
+                        c.isChecked = s
+                        if (s) n++
+                    }
+                    text = if (n == 0) "No veo ninguna errata clara" else "Marcadas $n: revísalas y borra"
+                }
+            }, margen(2))
+        }
 
         // Orden alfabético (sin tildes) para poder saltar por letras.
         val ordenadas = filas.sortedBy { Dictionary.normalizar(it.first) }
