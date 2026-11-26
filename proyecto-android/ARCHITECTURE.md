@@ -144,3 +144,7 @@ Se considera contraseña si la variación es `TYPE_TEXT_VARIATION_PASSWORD`, `VI
 - `voice/VoiceText`: comandos de voz (coma, punto, nueva línea…), espaciado y mayúscula tras punto.
 - `settings/VoiceActivity`: enlace copiable (small / grande), importar, borrar, permiso de micrófono, opciones.
 - Permiso nuevo: RECORD_AUDIO (único). Sigue sin INTERNET. Icono 🎤 solo si hay modelo; no en contraseñas; lo dictado no se aprende.
+
+## v0.9.1 — menos erratas aprendidas
+- `suggest/Errata`: detecta erratas de dedo (tecla vecina QWERTY, letras cambiadas, de más o de menos). Esas palabras piden 5 usos; el resto, `Prefs.learnAfter` (1–3, por defecto 2).
+- Pantalla de palabras aprendidas: botón «Marcar posibles erratas» para limpiar lo ya guardado.
